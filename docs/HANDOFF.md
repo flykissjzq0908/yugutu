@@ -243,3 +243,12 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 ### 回归
 - 新增 `tests/vue-edge-refresh-converge.js`：4 层 edge-to-edge 链 + 普通绝对连线；断言子线实际渲染起点与父线锚点一致（误差 < 0.01）、普通边起点保持原坐标、层级校验通过、无控制台错误。
 - 原 12 项前端回归 + `vue-dangling-repair.js` + 新回归全部通过，均为 `errors: []`。
+
+## 20. Git 接入与 V1.0 基线（2026-09-04）
+
+- 当前版本定为鱼骨图 V1.0，基线提交 `c7df4fa`，标签 `v1.0`，本地与 GitHub `origin/main` 一致。
+- Git 历史已重建为干净单根提交，历史与当前树均不含 `.bat`、真实 `config.yaml`、调试脚本、内网 IP 与示例数据库口令。
+- 调试脚本本地文件保留，已加入 `.gitignore` 并从 Git 跟踪移除。
+- `.rollback` 旧快照已清理，后续回退以 Git 标签为准。
+- V1.0 功能基线记录在 `docs/ygt-version-history.md`，README 当前进度已同步。
+- 新项目 Git 初始化可使用技能 `git-project-init`（`C:\Users\jinzq\.codex\skills\git-project-init`）。
