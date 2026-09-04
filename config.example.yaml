@@ -1,0 +1,43 @@
+# 复制为 config.yaml 后按环境修改；jwt 参数必须与统一登录（SSO）签发配置一致
+app:
+  host: "127.0.0.1"
+  port: 8766
+  api_prefix: "/api/v1"
+  static_dir: "vue/dist"
+  db_path: "data/yugutu.db"
+
+jwt:
+  secret_key: "替换为与统一登录一致的密钥"
+  issuer: "http://localhost:8766"
+  audience: "http://localhost:8766"
+  expires_minutes: 480
+  # 可选：额外 JWT 提供方（例如 SSO 平台）。本机 make_token 生成的 token
+  # 仍按上方 secret_key/issuer/audience 校验，SSO token 会按下面列表依次尝试。
+  providers:
+    - secret_key: "替换为SSO签名密钥"
+      issuer: "http://localhost:5001"
+      audience: "http://localhost:5001"
+      # algorithms: ["HS256"]
+
+database:
+  # sqlite（默认，无需外部数据库）
+  type: "sqlite"
+  # PostgreSQL 示例
+  # type: "postgresql"
+  # host: "localhost"
+  # port: 5432
+  # username: "postgres"
+  # password: "change-me"
+  # database: "your_database"
+  # connect_timeout: 30
+  # search_path: "public"
+  # Oracle 示例
+  # type: "oracle"
+  # host: "localhost"
+  # port: 1521
+  # username: "your_user"
+  # password: "change-me"
+  # database: "your_service"          # service_name
+  # oracle_path: ""           # 客户端路径，留空为 thin 模式
+  connect_timeout: 30
+  search_path: "public"

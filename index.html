@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>鱼骨图编辑器 - 文档列表</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; font-family: "Microsoft YaHei", Arial, sans-serif; color: #1f2937; background: #f3f4f6; }
+    header {
+      display: flex; align-items: center; justify-content: space-between; height: 52px;
+      padding: 0 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb;
+    }
+    header h1 { font-size: 16px; margin: 0; }
+    header button {
+      height: 30px; padding: 0 14px; border: 1px solid #1a73e8; border-radius: 4px;
+      background: #1a73e8; color: #ffffff; cursor: pointer; font-size: 13px;
+    }
+    main { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+    .doc-row {
+      display: flex; align-items: center; gap: 16px; padding: 14px 16px;
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 10px;
+    }
+    .doc-title { flex: 1 1 auto; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .doc-time { flex: 0 0 180px; font-size: 12px; color: #6b7280; }
+    .doc-ops { display: flex; gap: 6px; }
+    .doc-ops button {
+      height: 26px; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 4px;
+      background: #ffffff; cursor: pointer; font-size: 12px; color: #1f2937;
+    }
+    .doc-ops button:hover { border-color: #1a73e8; color: #1a73e8; }
+    .doc-ops button.danger:hover { border-color: #ef4444; color: #dc2626; }
+    .empty { color: #6b7280; text-align: center; padding: 60px 0; }
+  </style>
+  <style id="ygt-theme-css">
+    :root { --y-bg:#f3f4f6; --y-panel:#ffffff; --y-border:#e5e7eb; --y-text:#1f2937; --y-muted:#6b7280; --y-primary:#2563eb; }
+    [data-theme="dark"] { --y-bg:#111827; --y-panel:#1f2937; --y-border:#374151; --y-text:#e5e7eb; --y-muted:#9ca3af; --y-primary:#3b82f6; }
+    body { background: var(--y-bg); color: var(--y-text); }
+    header { background: var(--y-panel); border-color: var(--y-border); }
+    header h1 { color: var(--y-text); }
+    header button { background: var(--y-primary); border-color: var(--y-primary); }
+    .doc-row { background: var(--y-panel); border-color: var(--y-border); }
+    .doc-time { color: var(--y-muted); }
+    .doc-ops button { background: var(--y-panel); color: var(--y-text); border-color: var(--y-border); }
+    .empty { color: var(--y-muted); }
+  </style>
+  <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('ygt.theme') === 'dark' ? 'dark' : 'light');</script>
+</head>
+<body>
+  <header>
+    <h1>鱼骨图编辑器</h1>
+    <button id="btn-new-doc" type="button">新建鱼骨图</button>
+  </header>
+  <main id="doc-list"></main>
+
+  <script src="lib/x6.min.js?v=2"></script>
+  <script src="js/ygt-core.js?v=2"></script>
+  <script src="js/ygt-shapes.js?v=2"></script>
+  <script src="js/ygt-app.js?v=2"></script>
+  <script>YGT.app.initIndex();</script>
+</body>
+</html>

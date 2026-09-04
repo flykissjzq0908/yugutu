@@ -1,0 +1,7 @@
+fastapi==0.109.0
+uvicorn>=0.23.0
+PyJWT>=2.6.0
+SQLAlchemy>=2.0.25
+PyYAML>=6.0
+psycopg[binary]>=3.3
+oracledb>=2.0.1

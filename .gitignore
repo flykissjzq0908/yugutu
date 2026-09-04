@@ -1,0 +1,24 @@
+npm-libs/
+npm-libs-p7/
+tests/shots/
+tests/.tmp/
+node_modules/
+.pnpm-store/
+.venv/
+.rollback/
+build/
+data/
+dist/
+dist_package/
+logs/
+vue/node_modules/
+vue/dist/
+*.zip
+config.yaml
+__pycache__/
+*.pyc
+
+# Windows packaging scripts
+*.bat
+tests/debug-exp.js
+tests/*-debug*.js

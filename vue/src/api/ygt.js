@@ -1,0 +1,10 @@
+import http from './client';
+
+export const ygtApi = {
+  list: () => http.get('/v1/ygt/docs'),
+  create: (payload) => http.post('/v1/ygt/docs', payload),
+  get: (id) => http.get(`/v1/ygt/docs/${encodeURIComponent(id)}`),
+  save: (id, payload) => http.put(`/v1/ygt/docs/${encodeURIComponent(id)}`, payload),
+  rename: (id, title) => http.post(`/v1/ygt/docs/${encodeURIComponent(id)}/rename`, { title }),
+  remove: (id) => http.delete(`/v1/ygt/docs/${encodeURIComponent(id)}`)
+};

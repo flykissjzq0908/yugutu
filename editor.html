@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>鱼骨图编辑器</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: "Microsoft YaHei", Arial, sans-serif; color: #1f2937; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+
+    #toolbar {
+      flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
+      padding: 7px 12px;
+      border-bottom: 1px solid #e5e7eb; background: #ffffff; position: relative;
+    }
+    .tb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+    .history-panel {
+      position: absolute; top: calc(100% + 4px); right: 12px; width: 300px; max-height: 360px; overflow: auto;
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.12); z-index: 1500; padding: 8px; font-size: 12px; color: #374151;
+    }
+    .hp-title { font-weight: 600; margin-bottom: 6px; }
+    .hp-empty { color: #9ca3af; padding: 8px 0; }
+    .hp-row { padding: 5px 4px; border-bottom: 1px dashed #e5e7eb; cursor: pointer; }
+    .hp-row:hover { background: #f3f4f6; }
+    .hp-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .hp-actions button {
+      flex: 1; height: 26px; border: 1px solid #d1d5db; border-radius: 4px;
+      background: #ffffff; cursor: pointer; font-size: 12px; color: #1f2937;
+    }
+    .hp-actions button:hover { border-color: #1a73e8; color: #1a73e8; }
+    #toolbar input[type="text"] {
+      width: 220px; flex: 1 1 auto; min-width: 90px; max-width: 460px;
+      height: 28px; padding: 0 8px; border: 1px solid #d1d5db;
+      border-radius: 4px; font-size: 13px;
+    }
+    #toolbar button, #toolbar select {
+      height: 28px; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 4px;
+      background: #ffffff; cursor: pointer; font-size: 13px; color: #1f2937;
+    }
+    #toolbar button:hover { border-color: #1a73e8; color: #1a73e8; }
+    .ygt-home { color: #1a73e8; text-decoration: none; font-size: 13px; white-space: nowrap; }
+    .ygt-sep { width: 1px; height: 20px; background: #e5e7eb; margin: 0 2px; }
+    .ygt-toast { font-size: 12px; margin-left: auto; white-space: nowrap; }
+    #toolbar button, #toolbar select, #toolbar input,
+    #props button, #props input, #props select {
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    }
+
+    main { flex: 1 1 auto; display: flex; min-height: 0; }
+    #stencil {
+      width: 226px; flex: 0 0 226px; border-right: 1px solid #e5e7eb;
+      background: #f9fafb; overflow: auto; position: relative;
+    }
+    #stencil .x6-widget-stencil { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    #container-wrap { flex: 1 1 auto; min-width: 0; position: relative; background: #ffffff; }
+    #container { width: 100%; height: 100%; touch-action: none; }
+    #stencil.hidden, #props.hidden { display: none; }
+    #props {
+      width: 280px; flex: 0 0 280px; border-left: 1px solid #e5e7eb;
+      background: #f9fafb; overflow: auto; padding: 12px; font-size: 13px;
+    }
+    #props h3 { margin: 0 0 10px; font-size: 14px; color: #374151; }
+    .prop-group { margin-bottom: 8px; }
+    .prop-label { display: block; margin-bottom: 3px; color: #4b5563; font-size: 12px; }
+    .prop-group input[type="text"],
+    .prop-group input[type="number"],
+    .prop-group select {
+      width: 100%; height: 26px; padding: 0 6px; border: 1px solid #d1d5db;
+      border-radius: 4px; font-size: 13px;
+    }
+    .prop-group input[type="color"] { width: 100%; height: 28px; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px; }
+    .prop-group input[type="range"] { width: 100%; }
+    .prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .prop-divider { height: 1px; background: #e5e7eb; margin: 10px 0; }
+    .prop-group.check label { display: flex; align-items: center; gap: 6px; color: #374151; }
+    .prop-info { color: #6b7280; font-size: 12px; margin: 4px 0; }
+    #props button {
+      width: 100%; height: 30px; margin-top: 10px; border: 1px solid #ef4444;
+      border-radius: 4px; background: #ffffff; color: #dc2626; cursor: pointer; font-size: 13px;
+    }
+    #props button:hover:not(:disabled) { background: #fef2f2; }
+    #props button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #props .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    #props .btn-row button { margin-top: 0; padding: 0 6px; border-color: #d1d5db; color: #374151; }
+    #props .btn-row button:hover:not(:disabled) { border-color: #1a73e8; color: #1a73e8; background: #ffffff; }
+    #props #prop-open-url { border-color: #1a73e8; color: #1a73e8; }
+    #props #prop-open-url:hover:not(:disabled) { background: #eff6ff; }
+    #props button.ghost { border-color: #1a73e8; color: #1a73e8; margin-top: 6px; }
+    #props button.ghost:hover:not(:disabled) { background: #eff6ff; }
+    .spine-dot-list { margin-top: 6px; }
+    .spine-dot-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 0; border-bottom: 1px dashed #e5e7eb;
+    }
+    .spine-dot-row button {
+      margin-top: 0; width: auto; height: 24px; padding: 0 10px;
+      border: 1px solid #ef4444; color: #dc2626; font-size: 12px;
+    }
+    #props .align-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+    #props .align-row button {
+      height: 26px; padding: 0 4px; font-size: 12px; margin-top: 0;
+      border: 1px solid #d1d5db; border-radius: 4px; background: #ffffff; cursor: pointer; color: #374151;
+    }
+    #props .align-row button:hover:not(:disabled) { border-color: #1a73e8; color: #1a73e8; }
+    #props .align-row button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ygt-global-toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      z-index: 2000; padding: 8px 14px; border-radius: 6px; background: #ffffff;
+      border: 1px solid #d1d5db; box-shadow: 0 4px 14px rgba(0,0,0,.14);
+      font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
+      max-width: 70vw; text-align: center;
+    }
+    .ygt-empty-hint {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      flex-direction: column; align-items: center; gap: 10px; z-index: 10;
+      background: rgba(255,255,255,.92); border: 1px dashed #cbd5e1; border-radius: 8px;
+      padding: 20px 28px; font-size: 14px; color: #6b7280; pointer-events: none;
+    }
+    .ygt-empty-hint button {
+      pointer-events: auto; height: 30px; padding: 0 14px; border: 1px solid #1a73e8;
+      border-radius: 4px; background: #1a73e8; color: #ffffff; cursor: pointer; font-size: 13px;
+    }
+    .ygt-preview .x6-port,
+    .ygt-preview .x6-port-body,
+    .ygt-hide-ports .x6-port,
+    .ygt-hide-ports .x6-port-body { display: none; }
+    .x6-port, .x6-port-body { opacity: 0; transition: opacity .15s; }
+    .x6-cell:hover .x6-port, .x6-cell:hover .x6-port-body { opacity: 1; }
+    .ygt-preview .x6-node[data-shape="dot-node"],
+    .ygt-hide-ports .x6-node[data-shape="dot-node"] { visibility: hidden; pointer-events: none; }
+    .ygt-preview .x6-widget-selection,
+    .ygt-preview .x6-widget-transform { display: none; }
+    .ygt-preview-overlay {
+      position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 900;
+      background: rgba(255,255,255,.35); display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    .ygt-preview-title {
+      font-size: 15px; font-weight: 600; color: #374151;
+      background: rgba(255,255,255,.92); padding: 6px 14px; border-radius: 6px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    }
+    .ygt-preview-overlay button {
+      pointer-events: auto; height: 30px; padding: 0 16px; border: 1px solid #1a73e8;
+      border-radius: 4px; background: #1a73e8; color: #ffffff; cursor: pointer; font-size: 13px;
+    }
+  </style>
+  <style id="ygt-theme-css">
+    :root {
+      --y-bg: #f5f6f8; --y-panel: #ffffff; --y-border: #e5e7eb;
+      --y-text: #1f2937; --y-muted: #6b7280; --y-primary: #2563eb;
+      --y-primary-soft: #eff6ff; --y-hover: #f3f4f6; --y-toolbar: #ffffff;
+    }
+    [data-theme="dark"] {
+      --y-bg: #111827; --y-panel: #1f2937; --y-border: #374151;
+      --y-text: #e5e7eb; --y-muted: #9ca3af; --y-primary: #3b82f6;
+      --y-primary-soft: #1e3a5f; --y-hover: #263244; --y-toolbar: #111827;
+    }
+    body { background: var(--y-bg); color: var(--y-text); }
+    #toolbar { background: var(--y-toolbar); border-color: var(--y-border); }
+    #toolbar input[type="text"] { background: var(--y-panel); color: var(--y-text); border-color: var(--y-border); }
+    #toolbar button, #toolbar select { background: var(--y-panel); color: var(--y-text); border-color: var(--y-border); }
+    #toolbar button:hover { border-color: var(--y-primary); color: var(--y-primary); }
+    .ygt-home { color: var(--y-primary); }
+    .ygt-sep { background: var(--y-border); }
+    #stencil, #props { background: var(--y-panel); border-color: var(--y-border); }
+    #props h3 { color: var(--y-text); }
+    .prop-label { color: var(--y-muted); }
+    .prop-group input[type="text"], .prop-group input[type="number"], .prop-group select,
+    .prop-group input[type="color"] { background: var(--y-panel); color: var(--y-text); border-color: var(--y-border); }
+    .prop-info { color: var(--y-muted); }
+    #props button { background: var(--y-panel); color: var(--y-text); }
+    #props button.ghost, #props #prop-open-url { border-color: var(--y-primary); color: var(--y-primary); }
+    #props button.ghost:hover:not(:disabled), #props #prop-open-url:hover:not(:disabled) { background: var(--y-primary-soft); }
+    .spine-dot-row { border-color: var(--y-border); }
+    .history-panel { background: var(--y-panel); border-color: var(--y-border); color: var(--y-text); }
+    .hp-row { border-color: var(--y-border); }
+    .hp-row:hover { background: var(--y-hover); }
+    .hp-actions button { background: var(--y-panel); color: var(--y-text); border-color: var(--y-border); }
+    .ygt-global-toast { background: var(--y-panel); border-color: var(--y-border); color: var(--y-text); }
+    .ygt-empty-hint { background: rgba(255,255,255,.92); color: var(--y-muted); border-color: var(--y-border); }
+    [data-theme="dark"] .ygt-empty-hint { background: rgba(17,24,39,.92); }
+    #toolbar button { padding: 0 12px; transition: background .15s, border-color .15s, color .15s; }
+    #toolbar button:hover { background: var(--y-hover); border-color: var(--y-primary); color: var(--y-primary); }
+    #btn-save { background: var(--y-primary); border-color: var(--y-primary); color: #ffffff; }
+    #btn-save:hover { background: var(--y-primary); border-color: var(--y-primary); color: #ffffff; opacity: .9; }
+    #btn-clear { color: var(--y-danger); border-color: var(--y-danger); }
+    #btn-clear:hover { background: rgba(220,38,38,.08); color: var(--y-danger); border-color: var(--y-danger); }
+    #toolbar button { display: inline-flex; align-items: center; }
+    .tb-ic { width: 14px; height: 14px; margin-right: 5px; flex: 0 0 auto; }
+    .tb-label { vertical-align: middle; }
+    #btn-theme { font-weight: 600; }
+    .ygt-zoom {
+      position: absolute; right: 12px; bottom: 12px; z-index: 800;
+      display: flex; align-items: center; gap: 4px;
+      background: var(--y-panel); border: 1px solid var(--y-border); border-radius: 6px;
+      padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    .ygt-zoom button {
+      height: 26px; min-width: 26px; padding: 0 8px;
+      border: 1px solid var(--y-border); border-radius: 4px;
+      background: var(--y-panel); color: var(--y-text); cursor: pointer; font-size: 13px;
+    }
+    .ygt-zoom button:hover { border-color: var(--y-primary); color: var(--y-primary); }
+    .ygt-zoom-val { min-width: 44px; text-align: center; font-size: 12px; color: var(--y-muted); }
+    .ygt-panning { cursor: grabbing; }
+    .ygt-line-mode { cursor: crosshair; }
+    #btn-line.active { background: var(--y-primary); border-color: var(--y-primary); color: #ffffff; }
+    .ygt-ctx-menu {
+      position: fixed; z-index: 3000; display: none; min-width: 120px;
+      background: var(--y-panel); border: 1px solid var(--y-border); border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.16); padding: 4px;
+    }
+    .ygt-ctx-menu button {
+      display: block; width: 100%; text-align: left; height: 28px; padding: 0 10px;
+      border: none; background: transparent; color: var(--y-text); cursor: pointer; font-size: 13px; border-radius: 4px;
+    }
+    .ygt-ctx-menu button:hover { background: var(--y-hover); color: var(--y-primary); }
+    .ygt-selected { outline: 2px solid var(--y-primary); outline-offset: 2px; }
+    @media (max-width: 1280px) {
+      #toolbar .tb-label { display: none; }
+      #toolbar button { padding: 0 8px; }
+      #toolbar input[type="text"] { width: 150px; }
+      #toolbar .ygt-toast { display: none; }
+    }
+    @media (max-width: 900px) {
+      #toolbar { padding: 6px 8px; }
+      #toolbar input[type="text"] { width: 120px; }
+    }
+  </style>
+  <style>
+    .ygt-guide-overlay {
+      position: fixed; inset: 0; z-index: 4000;
+      background: rgba(15, 23, 42, .45);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .ygt-guide-overlay[hidden] { display: none; }
+    .ygt-guide-dialog {
+      width: min(720px, 94vw); max-height: 86vh;
+      background: var(--y-panel); border: 1px solid var(--y-border); border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .ygt-guide-head {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--y-border);
+    }
+    .ygt-guide-head span { font-size: 15px; font-weight: 600; color: var(--y-text); }
+    .ygt-guide-head button {
+      width: 30px; height: 30px; border: none; background: transparent; color: var(--y-muted);
+      font-size: 24px; line-height: 1; cursor: pointer; border-radius: 6px;
+    }
+    .ygt-guide-head button:hover { background: var(--y-hover); color: var(--y-text); }
+    .ygt-guide-body { flex: 1 1 auto; padding: 16px 20px 22px; overflow: auto; font-size: 13px; line-height: 1.75; color: var(--y-text); }
+    .ygt-guide-body h4 { margin: 16px 0 6px; font-size: 13px; color: var(--y-primary); }
+    .ygt-guide-body h4:first-child { margin-top: 0; }
+    .ygt-guide-body ul { margin: 4px 0; padding-left: 20px; }
+    .ygt-guide-body li { margin: 2px 0; }
+    .ygt-guide-body code, .ygt-guide-body kbd {
+      background: var(--y-hover); border: 1px solid var(--y-border); border-radius: 4px;
+      padding: 0 5px; font-size: 12px; font-family: Consolas, Menlo, monospace; color: var(--y-text);
+    }
+    .ygt-guide-body kbd { font-weight: 600; }
+    .ygt-guide-note { color: var(--y-muted); font-size: 12px; margin-top: 14px; border-top: 1px dashed var(--y-border); padding-top: 10px; }
+  </style>
+</head>
+<body>
+  <header id="toolbar"></header>
+  <main>
+    <aside id="stencil"></aside>
+    <section id="container-wrap">
+      <div id="container"></div>
+    </section>
+    <aside id="props"></aside>
+  </main>
+
+  <div id="guide-overlay" class="ygt-guide-overlay" hidden>
+    <div class="ygt-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div class="ygt-guide-head">
+        <span id="guide-title">操作说明</span>
+        <button id="guide-close" type="button" title="关闭" aria-label="关闭">&times;</button>
+      </div>
+      <div class="ygt-guide-body">
+        <h4>一、基础操作</h4>
+        <ul>
+          <li>从左侧「组件」库把鱼头 / 鱼尾 / 鱼干 / 一级鱼刺 / 二级鱼刺 / 内容 / 文本框 / 图片拖到画布。</li>
+          <li>从节点端口拖出连线到另一节点，即可建立连接。</li>
+          <li>双击节点或连线上的文字进行编辑。</li>
+          <li>选中元素后，用右侧「属性」面板修改颜色、字体、字号、背景、边框、线宽等样式。</li>
+        </ul>
+
+        <h4>二、鱼骨图结构</h4>
+        <ul>
+          <li>鱼头 + 鱼尾 + 鱼干组成主轴。</li>
+          <li>一级鱼刺连到鱼干；二级鱼刺（子原因）连到一级鱼刺的线体上。</li>
+          <li>层级关系（父级 / 顺序 / 层级）自动保存，保存与导入时会自动校验。</li>
+        </ul>
+
+        <h4>三、连接点</h4>
+        <ul>
+          <li><kbd>Alt</kbd> + 单击线体：在点击处添加一个空心连接点。</li>
+          <li>双击鱼干：在鱼干上添加连接点。</li>
+          <li>连接点可自由拖动，也可拖离线段成为自由连接点；靠近线段会自动吸附。</li>
+          <li>预览与导出时会隐藏连接点并补齐线段空隙。</li>
+        </ul>
+
+        <h4>四、模板与画布</h4>
+        <ul>
+          <li>顶部「模板」下拉：空骨架 / 经典六原因 / 根因分析。</li>
+          <li>右下角缩放控件或 <kbd>Ctrl</kbd>+滚轮 缩放；<kbd>空格</kbd>+左键 平移画布。</li>
+        </ul>
+
+        <h4>五、预览与导出</h4>
+        <ul>
+          <li>「预览」隐藏端口与连接点，只显示最终效果。</li>
+          <li>支持导出 PNG / SVG / PDF / JSON，并可通过「导入 JSON」恢复。</li>
+        </ul>
+
+        <h4>六、快捷键</h4>
+        <ul>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> 撤销 / 重做</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>X</kbd> / <kbd>D</kbd> 复制 / 粘贴 / 剪切 / 快速复制</li>
+          <li><kbd>Ctrl</kbd>+<kbd>A</kbd> 全选 · <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存 · <kbd>Delete</kbd> 删除</li>
+          <li>方向键 移动 1px · <kbd>Shift</kbd>+方向键 移动 10px</li>
+          <li><kbd>空格</kbd>+左键 平移 · <kbd>Ctrl</kbd>+<kbd>=</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> 缩放 · <kbd>Ctrl</kbd>+<kbd>0</kbd> 实际大小</li>
+        </ul>
+
+        <div class="ygt-guide-note">提示：图片节点可在属性面板设为背景；「主题」按钮可切换浅色 / 深色。</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/x6.min.js?v=3"></script>
+  <script src="lib/jspdf.umd.min.js?v=3"></script>
+  <script src="js/ygt-core.js?v=3"></script>
+  <script src="js/ygt-shapes.js?v=3"></script>
+  <script src="js/ygt-canvas.js?v=3"></script>
+  <script src="js/ygt-props.js?v=3"></script>
+  <script src="js/ygt-toolbar.js?v=3"></script>
+  <script src="js/ygt-app.js?v=3"></script>
+  <script>YGT.app.initEditor();</script>
+</body>
+</html>
