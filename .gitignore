@@ -1,7 +1,8 @@
 npm-libs/
 npm-libs-p7/
 tests/shots/
-tests/.tmp/
+tests/.tmp/    
+tests/
 node_modules/
 .pnpm-store/
 .venv/
