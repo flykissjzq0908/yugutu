@@ -5,6 +5,7 @@ window.YGT = window.YGT || {};
 
   function create(opts) {
     var o = opts || {};
+    var readonly = !!o.readonly;
     var container = document.getElementById(o.containerId || 'container');
     if (!container) throw new Error('画布容器不存在');
 
@@ -57,6 +58,14 @@ window.YGT = window.YGT || {};
     graph.use(clipboard);
     graph.use(history);
     graph.use(exportPlugin);
+
+    if (readonly) {
+      if (selection && typeof selection.disable === 'function') selection.disable();
+      if (keyboard && typeof keyboard.disable === 'function') keyboard.disable();
+      if (clipboard && typeof clipboard.disable === 'function') clipboard.disable();
+      if (transformPlugin && typeof transformPlugin.disable === 'function') transformPlugin.disable();
+      container.classList.add('ygt-preview');
+    }
 
     function batch(fn) {
       var m = graph.model;
@@ -170,7 +179,7 @@ window.YGT = window.YGT || {};
         el.tagName === 'SELECT' || el.isContentEditable));
     }
     function onKeydown(e) {
-      if (isTypingTarget(e)) return;
+      if (readonly || isTypingTarget(e)) return;
       var mod = e.ctrlKey || e.metaKey;
       if (mod && !e.altKey) {
         var k = String(e.key || '').toLowerCase();
@@ -288,7 +297,7 @@ window.YGT = window.YGT || {};
     var editor = document.createElement('textarea');
     editor.id = 'ygt-inline-editor';
     editor.setAttribute('rows', '2');
-    editor.style.cssText = 'position:fixed;z-index:1000;min-width:160px;max-width:420px;' +
+    editor.style.cssText = 'position:fixed;z-index:1000;min-width:90px;max-width:420px;' + 'box-sizing:border-box;resize:none;white-space:pre-wrap;overflow-wrap:break-word;overflow:auto;' +
       'border:2px solid #1a73e8;border-radius:4px;font-size:14px;padding:4px 6px;outline:none;' +
       'background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.18);display:none;font-family:inherit;';
     document.body.appendChild(editor);
@@ -312,20 +321,128 @@ window.YGT = window.YGT || {};
     }
 
     editor.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
-      else if (e.key === 'Escape') hideEditor();
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        commitEdit();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        hideEditor();
+      }
     });
     editor.addEventListener('blur', function () { setTimeout(commitEdit, 120); });
 
     function showEditor(cell, clientPoint) {
+      if (readonly) return;
       editingCell = cell;
+      var label = cell.attr('label') || {};
+      var b = cell.getBBox();
+      var scale = currentScale();
+      var w = Math.max(90, Math.min(420, b.width * scale - 6));
+      var h = Math.max(50, Math.min(260, b.height * scale + 18));
       editor.value = cell.attr('label/text') || '';
       editor.style.display = 'block';
-      editor.style.left = Math.max(8, clientPoint.x - 90) + 'px';
-      editor.style.top = (clientPoint.y + 16) + 'px';
+      editor.style.width = Math.round(w) + 'px';
+      editor.style.height = Math.round(h) + 'px';
+      editor.style.fontSize = Math.max(11, Math.min(30, (label.fontSize || 14) * scale)) + 'px';
+      editor.style.left = Math.max(8, Math.round(clientPoint.x - w / 2)) + 'px';
+      editor.style.top = Math.max(8, Math.round(clientPoint.y - h / 2)) + 'px';
       editor.focus();
       editor.select();
     }
+
+    var fitCanvas = document.createElement('canvas');
+    var fitCtx = fitCanvas.getContext ? fitCanvas.getContext('2d') : null;
+    function fitLabelFont(label) {
+      var size = Number(label.fontSize) || 13;
+      var weight = String(label.fontWeight || '400');
+      if (weight === 'bold' || weight === '600') weight = '700';
+      var family = label.fontFamily || (Y.shapes && Y.shapes.FONT_FAMILY) || 'Microsoft YaHei, SimHei, sans-serif';
+      return weight + ' ' + size + 'px ' + family;
+    }
+    function fitTextWidth(text, font) {
+      if (!fitCtx) return String(text).length * 12;
+      fitCtx.font = font;
+      return fitCtx.measureText(String(text)).width || 0;
+    }
+    function fitTextPrefix(text, maxWidth, font) {
+      text = String(text);
+      if (fitTextWidth(text, font) <= maxWidth) return text;
+      var lo = 1;
+      var hi = text.length;
+      while (lo <= hi) {
+        var mid = Math.floor((lo + hi) / 2);
+        if (fitTextWidth(text.slice(0, mid), font) <= maxWidth) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return text.slice(0, Math.max(1, hi));
+    }
+    function applyFitText(cell, display, truncated, silent) {
+      var current = cell.attr('label/textWrap');
+      if (truncated) {
+        if (current && current.text === display && current.width === -8 && current.height === -6 && current.ellipsis === false) return;
+        cell.attr({ label: { textWrap: { width: -8, height: -6, ellipsis: false, text: display } } }, { silent: !!silent });
+        return;
+      }
+      if (!current) return;
+      if (current.text == null && current.width === -8 && current.height === -6 && current.ellipsis !== false) return;
+      cell.attr({ label: { textWrap: { width: -8, height: -6, ellipsis: true, text: null } } }, { silent: !!silent });
+    }
+    function fitWrapText(cell, silent) {
+      if (!cell || !cell.isNode || !cell.isNode()) return;
+      if (cell.shape !== 'bone-node' && cell.shape !== 'group-node') return;
+      var label = cell.attr('label') || {};
+      if (typeof label.text !== 'string') return;
+      var size = cell.getSize();
+      var boxW = Math.max(1, size.width - 8);
+      var boxH = Math.max(1, size.height - 6);
+      var fontSize = Number(label.fontSize) || 13;
+      var lineHeight = Math.ceil(1.4 * 14);
+      var maxLines = Math.floor(boxH / lineHeight);
+      var ellipsis = String.fromCharCode(0x2026);
+      if (maxLines <= 0) {
+        applyFitText(cell, '', true, silent);
+        return;
+      }
+      var font = fitLabelFont(label);
+      var ellW = fitCtx ? fitTextWidth(ellipsis, font) : Math.max(4, fontSize);
+      var lines = [];
+      var hidden = false;
+      var parts = String(label.text).split('\n');
+      for (var i = 0; i < parts.length; i++) {
+        if (lines.length >= maxLines) {
+          hidden = true;
+          break;
+        }
+        var part = parts[i];
+        if (part === '') {
+          lines.push('');
+          continue;
+        }
+        var rest = part;
+        while (rest !== '' && lines.length < maxLines) {
+          var piece = fitTextPrefix(rest, boxW, font);
+          if (piece === '') piece = rest.charAt(0);
+          lines.push(piece);
+          rest = rest.slice(piece.length);
+          if (rest !== '' && lines.length >= maxLines) hidden = true;
+        }
+        if (rest !== '') hidden = true;
+      }
+      if (hidden && lines.length > 0) {
+        var lastIdx = lines.length - 1;
+        var last = lines[lastIdx];
+        if (fitTextWidth(last + ellipsis, font) > boxW) {
+          last = fitTextPrefix(last, Math.max(1, boxW - ellW), font);
+        }
+        lines[lastIdx] = last + ellipsis;
+      }
+      applyFitText(cell, lines.join('\n'), hidden, silent);
+    }
+    graph.on('node:added', function (args) { fitWrapText(args && args.node); });
+    graph.on('cell:change:size', function (args) { fitWrapText(args && args.cell); });
+    graph.on('cell:change:attrs', function (args) { fitWrapText(args && args.cell); });
 
     function edgePointAt(edge, ratio) {
       if (edge && edge.isEdge && edge.isEdge()) {
@@ -491,6 +608,7 @@ window.YGT = window.YGT || {};
     }
 
     graph.on('node:dblclick', function (args) {
+      if (readonly) return;
       if (args.node.shape === 'fish-spine') {
         var p;
         if (typeof args.x === 'number' && typeof args.y === 'number') {
@@ -506,6 +624,7 @@ window.YGT = window.YGT || {};
       showEditor(args.node, graph.localToClient({ x: b.x + b.width / 2, y: b.y + b.height / 2 }));
     });
     graph.on('edge:dblclick', function (args) {
+      if (readonly) return;
       var p;
       if (typeof args.x === 'number' && typeof args.y === 'number') {
         p = { x: args.x, y: args.y };
@@ -516,6 +635,7 @@ window.YGT = window.YGT || {};
       addDotOnEdge(args.edge, p);
     });
     graph.on('edge:click', function (args) {
+      if (readonly) return;
       if (args.e && args.e.altKey) {
         var p = (typeof args.x === 'number' && typeof args.y === 'number') ? { x: args.x, y: args.y } : null;
         if (p) addDotOnEdge(args.edge, p);
@@ -589,6 +709,7 @@ window.YGT = window.YGT || {};
     }
 
     graph.on('edge:mousedown', function (args) {
+      if (readonly) return;
       var edge = args.edge;
       if (!edge || edge.shape !== 'bone-edge' || !args.e) return;
       // 按下点在端口上时不拦截（端口拖拽建连场景）
@@ -821,6 +942,7 @@ window.YGT = window.YGT || {};
       if (v && v.el) v.el.classList.remove('ygt-selected');
     });
     graph.on('node:mousedown', function (args) {
+      if (readonly) return;
       if ((args.node.shape === 'bone-node' || args.node.shape === 'group-node') && args.e) {
         nodeBodyDrag = {
           node: args.node,
@@ -1039,7 +1161,7 @@ window.YGT = window.YGT || {};
 
     // ---------- 空画布引导 ----------
     var emptyOverlay = null;
-    if (container.parentNode) {
+    if (!readonly && container.parentNode) {
       emptyOverlay = document.createElement('div');
       emptyOverlay.className = 'ygt-empty-hint';
       emptyOverlay.innerHTML =
@@ -1061,7 +1183,7 @@ window.YGT = window.YGT || {};
 
     // ---------- 预览模式 ----------
     var previewOverlay = null;
-    if (container.parentNode) {
+    if (!readonly && container.parentNode) {
       previewOverlay = document.createElement('div');
       previewOverlay.className = 'ygt-preview-overlay';
       previewOverlay.innerHTML =
@@ -1116,7 +1238,8 @@ window.YGT = window.YGT || {};
           var dx = e.touches[0].clientX - oneStart.x;
           var dy = e.touches[0].clientY - oneStart.y;
           oneStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-          if (typeof graph.translate === 'function') graph.translate(dx, dy);
+          if (typeof graph.translateBy === 'function') graph.translateBy(dx, dy);
+      else if (typeof graph.translate === 'function') graph.translate(dx, dy);
           e.preventDefault();
         } else if (e.touches.length === 2 && pinchStart > 0) {
           var dist = Math.hypot(
@@ -1243,6 +1366,7 @@ window.YGT = window.YGT || {};
       if (!ctxMenu.contains(e.target)) hideMenu();
     });
     function showMenu(x, y, cell) {
+      if (readonly) return;
       ctxMenu.innerHTML = '';
       ctxMenu.style.left = x + 'px';
       ctxMenu.style.top = y + 'px';
@@ -1300,15 +1424,26 @@ window.YGT = window.YGT || {};
       if (typeof o.onSelection === 'function') o.onSelection(selectedCells());
     }
     graph.on('node:contextmenu', function (args) {
+      if (readonly) return;
       if (args.e) args.e.preventDefault();
       selection.reset([args.node]);
       showMenu(args.e.clientX, args.e.clientY, args.node);
     });
     graph.on('edge:contextmenu', function (args) {
+      if (readonly) return;
       if (args.e) args.e.preventDefault();
       selection.reset([args.edge]);
       showMenu(args.e.clientX, args.e.clientY, args.edge);
     });
+
+    function refreshNodeTextViews() {
+      graph.getNodes().forEach(function (n) {
+        if (!n || (n.shape !== 'bone-node' && n.shape !== 'group-node')) return;
+        fitWrapText(n, true);
+        var v = n.findView && n.findView(graph);
+        if (v && typeof v.update === 'function') v.update();
+      });
+    }
 
     // ---------- 文档操作 ----------
     function applyCells(cells) {
@@ -1384,10 +1519,17 @@ window.YGT = window.YGT || {};
       if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(function () {
           refreshEdges();
-          requestAnimationFrame(refreshEdges);
+          refreshNodeTextViews();
+          requestAnimationFrame(function () {
+            refreshEdges();
+            refreshNodeTextViews();
+          });
         });
       } else {
-        setTimeout(refreshEdges, 100);
+        setTimeout(function () {
+          refreshEdges();
+          refreshNodeTextViews();
+        }, 100);
       }
       selection.clean();
       updateEmptyHint();

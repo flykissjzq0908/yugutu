@@ -13,6 +13,7 @@
           <div class="doc-time">更新于 {{ formatTime(item.updatedAt) }}</div>
           <div class="doc-ops">
             <button type="button" @click="open(item)">打开</button>
+            <button type="button" @click="preview(item)">预览</button>
             <button type="button" @click="rename(item)">重命名</button>
             <button type="button" class="danger" @click="remove(item)">删除</button>
           </div>
@@ -52,6 +53,10 @@ async function load() {
 
 function open(item) {
   window.location.href = window.location.pathname + '?docId=' + encodeURIComponent(item.id);
+}
+
+function preview(item) {
+  window.location.href = window.location.pathname + '?docId=' + encodeURIComponent(item.id) + '&view=preview';
 }
 
 async function createDoc() {

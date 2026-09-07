@@ -241,7 +241,7 @@ window.YGT = window.YGT || {};
         label: {
           textAnchor: 'middle', textVerticalAnchor: 'middle',
           fontSize: 13, fill: '#1f2937', fontFamily: FONT_FAMILY,
-          textWrap: { width: 150, height: null, ellipsis: false }
+          textWrap: { width: -8, height: -6, ellipsis: true }
         }
       }
     }, true);
@@ -257,7 +257,7 @@ window.YGT = window.YGT || {};
         label: {
           textAnchor: 'middle', textVerticalAnchor: 'middle',
           fontSize: 14, fill: '#92400e', fontFamily: FONT_FAMILY,
-          textWrap: { width: 170, height: null, ellipsis: false }
+          textWrap: { width: -8, height: -6, ellipsis: true }
         }
       }
     }, true);

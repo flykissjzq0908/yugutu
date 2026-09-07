@@ -1,7 +1,7 @@
 <template>
   <header id="toolbar" class="ygt-toolbar">
     <div class="tb-row">
-      <a class="ygt-home" href="./">文档列表</a>
+      <a class="ygt-home" :href="homeHref">文档列表</a>
       <button type="button" title="显示/隐藏组件库" @click="$emit('toggle-stencil')">组件</button>
       <button type="button" title="显示/隐藏属性面板" @click="$emit('toggle-props')">属性</button>
       <input id="doc-title" type="text" maxlength="60" placeholder="鱼骨图标题"
@@ -68,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { icons } from './icons';
 
 const props = defineProps({
@@ -86,6 +86,12 @@ const emit = defineEmits([
   'toggle-stencil', 'toggle-props', 'hierarchy-toggle', 'import-file',
   'export-json', 'export-png', 'export-svg', 'export-pdf'
 ]);
+
+const homeHref = computed(() => {
+  const p = window.location.pathname;
+  const base = p.slice(0, p.lastIndexOf('/') + 1) || '/';
+  return base + 'index.html';
+});
 
 const templateVal = ref('');
 const historyOpen = ref(false);

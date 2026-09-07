@@ -252,3 +252,18 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - `.rollback` 旧快照已清理，后续回退以 Git 标签为准。
 - V1.0 功能基线记录在 `docs/ygt-version-history.md`，README 当前进度已同步。
 - 新项目 Git 初始化可使用技能 `git-project-init`（`C:\Users\jinzq\.codex\skills\git-project-init`）。
+
+## 21. 文字边框省略号与多行编辑（2026-09-04）
+
+- 一级/二级鱼刺及原因分组文字按节点框动态折行，超出按框截断并显示省略号，原文保存在 `label/text`；拖动框体或属性面板改宽高后即时重算。
+- 双击编辑改为多行文本域：Enter 换行，Ctrl/Cmd+Enter 或失焦提交，Esc 取消；属性面板文本输入同步改为 textarea。
+- 引擎修改同步根目录 `js/*` 与 `vue/public/js/*`，`vue/dist` 已重建。
+- 修复：`graph.fromJSON` 载入时不会触发 `node:added`，改为 `applyCells` 双帧后静默重算并刷新骨刺节点文字视图，历史文档载入即显示省略号且不误标脏状态。
+- 新增回归 `tests/vue-text-fit-ellipsis.js`、`tests/vue-text-load-ellipsis.js` 通过；版本记录见 `docs/ygt-version-history.md` V1.1。
+
+## 22. 独立只读预览界面（2026-09-07）
+
+- 新增 `?docId=xxx&view=preview` 只读预览页：无工具栏/组件库/属性面板，仅缩放与 PNG/SVG/PDF 导出。
+- 画布引擎新增 `readonly: true` 分支：隐藏端口/选择框/连接点，禁用节点拖拽、双击编辑、右键菜单与快捷键；按住空格 + 鼠标左键拖动平移（单击不拖动），触屏沿用单指平移。
+- 文档列表新增“预览”按钮；默认编辑器路径不受影响。
+- 新增回归 `tests/vue-preview-readonly.js` 通过；版本记录见 `docs/ygt-version-history.md` V1.2。

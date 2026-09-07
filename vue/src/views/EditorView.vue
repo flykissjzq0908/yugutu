@@ -386,12 +386,68 @@ function exportPNG() {
   toast('已导出 PNG');
 }
 
+function svgContentBox() {
+  const g = canvas.value.graph;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  g.getCells().forEach((cell) => {
+    const b = cell.getBBox && cell.getBBox();
+    if (!b) return;
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.width);
+    maxY = Math.max(maxY, b.y + b.height);
+  });
+  if (!Number.isFinite(minX)) return { x: 0, y: 0, width: 100, height: 100 };
+  const pad = 50;
+  return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
+}
+
+function prepareSvgExport(root) {
+  root.querySelectorAll('*').forEach((el) => {
+    if (!el.style) return;
+    const cls = String(el.getAttribute('class') || '');
+    const hasAttr = el.getAttribute('transform') != null;
+    if (cls.indexOf('x6-graph-svg-viewport') >= 0 || cls.indexOf('x6-graph-svg-stage') >= 0 ||
+        cls.indexOf('x6-cell') >= 0 || hasAttr) {
+      el.style.removeProperty('transform');
+    }
+  });
+  const vp = root.querySelector && root.querySelector('.x6-graph-svg-viewport');
+  if (vp) vp.removeAttribute('transform');
+  const b = svgContentBox();
+  root.setAttribute('viewBox', [b.x, b.y, b.width, b.height].join(' '));
+  root.setAttribute('width', String(b.width));
+  root.setAttribute('height', String(b.height));
+  return root;
+}
+
 function exportSVG() {
   const title = currentDoc.value ? (currentDoc.value.title || '鱼骨图') : '鱼骨图';
   canvas.value.withHiddenPorts(() => {
-    canvas.value.exportPlugin.exportSVG(title, { padding: 60 });
+    canvas.value.exportPlugin.exportSVG(title, {
+      beforeSerialize: prepareSvgExport
+    });
   });
   toast('已导出 SVG');
+}
+
+function pdfTitleImage(title) {
+  const text = String(title || '鱼骨图');
+  const canvas = document.createElement('canvas');
+  canvas.width = 1600;
+  canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '600 52px "Microsoft YaHei", "PingFang SC", "SimHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let fontSize = 52;
+  while (fontSize > 20 && ctx.measureText(text).width > canvas.width - 160) {
+    fontSize -= 2;
+    ctx.font = '600 ' + fontSize + 'px "Microsoft YaHei", "PingFang SC", "SimHei", sans-serif';
+  }
+  ctx.fillStyle = '#1f2937';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  return canvas.toDataURL('image/png');
 }
 
 function exportPDF() {
@@ -408,35 +464,17 @@ function exportPDF() {
         return;
       }
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const titleImg = pdfTitleImage(title);
       const img = new Image();
       img.onload = () => {
-        pdf.setFontSize(16);
-        pdf.setTextColor(30, 41, 59);
-        pdf.text(title, 148.5, 13, { align: 'center' });
+        pdf.addImage(titleImg, 'PNG', 5, 3, 287, 14);
         const pageW = 287;
         const pageH = 183;
         const ratio = Math.min(pageW / img.width, pageH / img.height);
         const w = img.width * ratio;
         const h = img.height * ratio;
-        const pageRatio = pageW / pageH;
-        const imgRatio = img.width / img.height;
-        const cols = imgRatio > pageRatio * 1.15 ? Math.ceil(imgRatio / pageRatio) : 1;
         const imgY = 22 + (pageH - h) / 2;
-        if (cols <= 1) {
-          pdf.addImage(dataUrl, 'PNG', 5 + (pageW - w) / 2, imgY, w, h);
-        } else {
-          const colW = w / cols;
-          const cropW = img.width / cols;
-          for (let c = 0; c < cols; c++) {
-            if (c > 0) {
-              pdf.addPage('a4', 'landscape');
-              pdf.setFontSize(16);
-              pdf.setTextColor(30, 41, 59);
-              pdf.text(title, 148.5, 13, { align: 'center' });
-            }
-            pdf.addImage(dataUrl, 'PNG', 5, imgY, colW, h, undefined, 'FAST', c * cropW, 0, cropW, img.height);
-          }
-        }
+        pdf.addImage(dataUrl, 'PNG', 5 + (pageW - w) / 2, imgY, w, h);
         pdf.save(title + '.pdf');
         toast('已导出 PDF');
       };

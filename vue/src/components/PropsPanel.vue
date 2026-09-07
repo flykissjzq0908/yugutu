@@ -119,8 +119,8 @@
 
       <div v-if="cellInfo.hasLabel" class="prop-group">
         <label class="prop-label">文本</label>
-        <input type="text" placeholder="双击画布也可编辑" :value="node.text"
-               @change="onFieldChange('text', $event.target.value)">
+        <textarea class="prop-text" rows="3" placeholder="双击画布也可编辑" :value="node.text"
+                  @change="onFieldChange('text', $event.target.value)"></textarea>
       </div>
 
       <h4 v-if="cellInfo.hasLabel" class="prop-section">文本与样式</h4>

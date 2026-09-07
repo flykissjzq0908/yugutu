@@ -169,6 +169,25 @@ window.YGT = window.YGT || {};
       toastMsg('已导出 JSON');
     }
 
+    function pdfTitleImage(title) {
+      var text = String(title || '鱼骨图');
+      var canvas = document.createElement('canvas');
+      canvas.width = 1600;
+      canvas.height = 80;
+      var ctx = canvas.getContext('2d');
+      ctx.font = '600 52px "Microsoft YaHei", "PingFang SC", "SimHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var fontSize = 52;
+      while (fontSize > 20 && ctx.measureText(text).width > canvas.width - 160) {
+        fontSize -= 2;
+        ctx.font = '600 ' + fontSize + 'px "Microsoft YaHei", "PingFang SC", "SimHei", sans-serif';
+      }
+      ctx.fillStyle = '#1f2937';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      return canvas.toDataURL('image/png');
+    }
+
     function exportPDF() {
       var jsPDF = window.jspdf && window.jspdf.jsPDF;
       if (!jsPDF) { toastMsg('PDF 组件未加载', true); return; }
@@ -179,32 +198,14 @@ window.YGT = window.YGT || {};
         var img = new Image();
         img.onload = function () {
           var title = ctx.doc.title || '鱼骨图';
-          pdf.setFontSize(16);
-          pdf.setTextColor(30, 41, 59);
-          pdf.text(title, 148.5, 13, { align: 'center' });
+          var titleImg = pdfTitleImage(title);
+          pdf.addImage(titleImg, 'PNG', 5, 3, 287, 14);
           var pageW = 287, pageH = 183;
           var ratio = Math.min(pageW / img.width, pageH / img.height);
           var w = img.width * ratio;
           var h = img.height * ratio;
-          var pageRatio = pageW / pageH;
-          var imgRatio = img.width / img.height;
-          var cols = imgRatio > pageRatio * 1.15 ? Math.ceil(imgRatio / pageRatio) : 1;
           var imgY = 22 + (pageH - h) / 2;
-          if (cols <= 1) {
-            pdf.addImage(dataUrl, 'PNG', 5 + (pageW - w) / 2, imgY, w, h);
-          } else {
-            var colW = w / cols;
-            var cropW = img.width / cols;
-            for (var c = 0; c < cols; c++) {
-              if (c > 0) {
-                pdf.addPage('a4', 'landscape');
-                pdf.setFontSize(16);
-                pdf.setTextColor(30, 41, 59);
-                pdf.text(title, 148.5, 13, { align: 'center' });
-              }
-              pdf.addImage(dataUrl, 'PNG', 5, imgY, colW, h, undefined, 'FAST', c * cropW, 0, cropW, img.height);
-            }
-          }
+          pdf.addImage(dataUrl, 'PNG', 5 + (pageW - w) / 2, imgY, w, h);
           pdf.save(title + '.pdf');
           toastMsg('已导出 PDF');
         };
@@ -274,9 +275,44 @@ window.YGT = window.YGT || {};
       });
       toastMsg('已导出 PNG');
     });
+    function svgContentBox() {
+      var g = ctx.canvas.graph;
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      g.getCells().forEach(function (cell) {
+        var b = cell.getBBox && cell.getBBox();
+        if (!b) return;
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.width);
+        maxY = Math.max(maxY, b.y + b.height);
+      });
+      if (!Number.isFinite(minX)) return { x: 0, y: 0, width: 100, height: 100 };
+      var pad = 50;
+      return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
+    }
+    function prepareSvgExport(root) {
+      root.querySelectorAll('*').forEach(function (el) {
+        if (!el.style) return;
+        var cls = String(el.getAttribute('class') || '');
+        var hasAttr = el.getAttribute('transform') != null;
+        if (cls.indexOf('x6-graph-svg-viewport') >= 0 || cls.indexOf('x6-graph-svg-stage') >= 0 ||
+            cls.indexOf('x6-cell') >= 0 || hasAttr) {
+          el.style.removeProperty('transform');
+        }
+      });
+      var vp = root.querySelector && root.querySelector('.x6-graph-svg-viewport');
+      if (vp) vp.removeAttribute('transform');
+      var b = svgContentBox();
+      root.setAttribute('viewBox', [b.x, b.y, b.width, b.height].join(' '));
+      root.setAttribute('width', String(b.width));
+      root.setAttribute('height', String(b.height));
+      return root;
+    }
     host.querySelector('#btn-export-svg').addEventListener('click', function () {
       ctx.canvas.withHiddenPorts(function () {
-        ctx.canvas.exportPlugin.exportSVG(ctx.doc.title || '鱼骨图', { padding: 60 });
+        ctx.canvas.exportPlugin.exportSVG(ctx.doc.title || '鱼骨图', {
+          beforeSerialize: prepareSvgExport
+        });
       });
       toastMsg('已导出 SVG');
     });
