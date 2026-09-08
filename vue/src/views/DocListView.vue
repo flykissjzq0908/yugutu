@@ -2,7 +2,7 @@
   <div class="ygt-app">
     <header class="doc-header">
       <h1>鱼骨图编辑器</h1>
-      <button class="btn-primary" type="button" :disabled="loading" @click="createDoc">新建鱼骨图</button>
+      <button class="btn-primary" type="button" :disabled="loading" @click="showCreate = true">新建鱼骨图</button>
     </header>
     <main class="doc-main">
       <p v-if="loading" class="empty">加载中...</p>
@@ -21,17 +21,20 @@
         <p v-if="!docs.length" class="empty">暂无鱼骨图，点击右上角新建</p>
       </template>
     </main>
+    <CreateDialog v-if="showCreate" @close="showCreate = false" />
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue';
+import CreateDialog from '../components/CreateDialog.vue';
 import { ygtApi } from '../api/ygt';
 import { errorMessage } from '../api/client';
 
 const docs = ref([]);
 const loading = ref(false);
 const error = ref('');
+const showCreate = ref(false);
 
 function formatTime(value) {
   if (!value) return '-';
@@ -59,20 +62,7 @@ function preview(item) {
   window.location.href = window.location.pathname + '?docId=' + encodeURIComponent(item.id) + '&view=preview';
 }
 
-async function createDoc() {
-  const name = window.prompt('新文档名称', '未命名鱼骨图');
-  try {
-    const cells = window.YGT && window.YGT.core ? window.YGT.core.templateCells('empty') : [];
-    const doc = await ygtApi.create({
-      title: (name && name.trim()) || '未命名鱼骨图',
-      cells,
-      canvas: { background: '#ffffff' }
-    });
-    window.location.href = window.location.pathname + '?docId=' + encodeURIComponent(doc.id);
-  } catch (e) {
-    error.value = errorMessage(e);
-  }
-}
+
 
 async function rename(item) {
   const name = window.prompt('新的文档名称', item.title || '');

@@ -267,3 +267,11 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - 画布引擎新增 `readonly: true` 分支：隐藏端口/选择框/连接点，禁用节点拖拽、双击编辑、右键菜单与快捷键；按住空格 + 鼠标左键拖动平移（单击不拖动），触屏沿用单指平移。
 - 文档列表新增“预览”按钮；默认编辑器路径不受影响。
 - 新增回归 `tests/vue-preview-readonly.js` 通过；版本记录见 `docs/ygt-version-history.md` V1.2。
+
+## 23. 鱼骨图 V2.0 定稿（2026-09-08）
+
+- 定稿当前版本为鱼骨图 V2.0；V1.x 历史功能与文档不回改。
+- 新建流程收口为列表页弹窗：名称 + 模板卡片 + 7 套预设预览，创建后直接进入编辑器。
+- 只新增 `CreateDialog.vue`、`FishPreview.vue` 与列表入口，不修改后端/编辑/保存/导出业务逻辑。
+- UI 示意图（3 套方向）仅存放在可视化临时目录，不纳入 V2.0。
+- 回归：`vue-create-dialog.js`、`vue-smoke.js`、`vue-preview-readonly.js` 通过。
