@@ -2,7 +2,10 @@
   <div class="ygt-app">
     <header class="doc-header">
       <h1>鱼骨图编辑器</h1>
-      <button class="btn-primary" type="button" :disabled="loading" @click="showCreate = true">新建鱼骨图</button>
+      <div class="doc-header-ops">
+        <button class="btn-secondary" type="button" :disabled="loading" @click="load">刷新</button>
+        <button class="btn-primary" type="button" :disabled="loading" @click="showCreate = true">新建鱼骨图</button>
+      </div>
     </header>
     <main class="doc-main">
       <p v-if="loading" class="empty">加载中...</p>
@@ -42,11 +45,23 @@ function formatTime(value) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString();
 }
 
+function queryFilters() {
+  const p = new URLSearchParams(window.location.search);
+  const filters = {};
+  const ksid = (p.get('ksid') || '').trim();
+  const lylx = (p.get('lylx') || '').trim();
+  const lyid = (p.get('lyid') || '').trim();
+  if (ksid) filters.ksid = ksid;
+  if (lylx) filters.lylx = lylx;
+  if (lyid) filters.lyid = lyid;
+  return filters;
+}
+
 async function load() {
   loading.value = true;
   error.value = '';
   try {
-    docs.value = await ygtApi.list();
+    docs.value = await ygtApi.list(queryFilters());
   } catch (e) {
     error.value = errorMessage(e);
   } finally {

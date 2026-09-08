@@ -201,16 +201,30 @@ def _doc_payload(
     )
 
 
-def list_docs() -> List[Dict[str, Any]]:
+def list_docs(
+    ksid: Optional[str] = None,
+    lylx: Optional[str] = None,
+    lyid: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    conditions = ["(zfpb IS NULL OR zfpb = 0)"]
+    params: Dict[str, Any] = {}
+    if ksid:
+        conditions.append("hldw = :ksid")
+        params["ksid"] = ksid
+    if lylx:
+        conditions.append("lylx = :lylx")
+        params["lylx"] = lylx
+    if lyid:
+        conditions.append("lyid = :lyid")
+        params["lyid"] = lyid
+    sql = """
+        SELECT xh, ygmc, cjrq
+        FROM hl_ygt
+        WHERE %s
+        ORDER BY cjrq DESC
+    """ % " AND ".join(conditions)
     with engine.connect() as conn:
-        rows = conn.execute(
-            text("""
-                SELECT xh, ygmc, cjrq
-                FROM hl_ygt
-                WHERE zfpb IS NULL OR zfpb = 0
-                ORDER BY cjrq DESC
-            """)
-        ).fetchall()
+        rows = conn.execute(text(sql), params).fetchall()
     return [
         {
             "id": r.xh,

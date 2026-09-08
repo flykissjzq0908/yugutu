@@ -1,7 +1,7 @@
 import http from './client';
 
 export const ygtApi = {
-  list: () => http.get('/v1/ygt/docs'),
+  list: (params) => http.get('/v1/ygt/docs', { params: params || {} }),
   create: (payload) => http.post('/v1/ygt/docs', payload),
   get: (id) => http.get(`/v1/ygt/docs/${encodeURIComponent(id)}`),
   save: (id, payload) => http.put(`/v1/ygt/docs/${encodeURIComponent(id)}`, payload),

@@ -23,6 +23,12 @@ body { background: var(--y-bg); color: var(--y-text); }
   padding: 0 24px; background: var(--y-panel); border-bottom: 1px solid var(--y-border);
 }
 .doc-header h1 { font-size: 16px; margin: 0; color: var(--y-text); }
+.btn-secondary {
+  height: 30px; padding: 0 14px; border: 1px solid var(--y-border); border-radius: 4px;
+  background: var(--y-panel); color: var(--y-text); cursor: pointer; font-size: 13px;
+}
+.btn-secondary:hover { border-color: var(--y-primary); color: var(--y-primary); }
+.doc-header-ops { display: flex; gap: 8px; }
 .btn-primary {
   height: 30px; padding: 0 14px; border: 1px solid var(--y-primary); border-radius: 4px;
   background: var(--y-primary); color: #ffffff; cursor: pointer; font-size: 13px;

@@ -44,11 +44,17 @@
         <button id="hier-close" type="button" @click="emit('close')">关闭</button>
       </div>
     </div>
+    <Transition name="hier-toast">
+      <div v-if="notice" class="hier-toast">
+        <span class="hier-toast-icon" aria-hidden="true">!</span>
+        <span>{{ notice }}</span>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ElTree } from 'element-plus';
 import 'element-plus/es/components/tree/style/css';
 
@@ -61,7 +67,15 @@ const emit = defineEmits(['close', 'saved', 'toast']);
 const rows = ref([]);
 const treeRef = ref(null);
 const treeKey = ref(0);
+const notice = ref('');
 let seq = 1;
+let noticeTimer = null;
+
+function showNotice(msg) {
+  notice.value = String(msg || '');
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { notice.value = ''; }, 2200);
+}
 
 function isRed(color) {
   if (!color || typeof color !== 'string') return false;
@@ -160,15 +174,20 @@ function addRoot() {
 }
 
 function addChild(row) {
-  if (row.level >= 5) {
-    emit('toast', '最多支持五级层级', true);
+  if (row.level >= 4) {
+    showNotice('不能新增第5级子节点');
     return;
   }
   addRow(row.id, row.level + 1);
 }
 
 function addSibling(row) {
-  addRow(row.parentId, row.parentId ? (rows.value.find((r) => r.id === row.parentId) || {}).level + 1 : 1);
+  const parentLevel = row.parentId ? (rows.value.find((r) => r.id === row.parentId) || {}).level + 1 : 1;
+  if (parentLevel >= 5) {
+    showNotice('不能新增第5级子节点');
+    return;
+  }
+  addRow(row.parentId, parentLevel);
 }
 
 function removeRow(row) {
@@ -230,7 +249,7 @@ function allowDrop(draggingNode, dropNode, type) {
   const dragId = draggingNode.data.id;
   const dropId = dropNode.data.id;
   if (dragId === dropId || isDescendant(dropId, dragId)) return false;
-  return dropNode.data.level < 5;
+  return dropNode.data.level < 4;
 }
 
 function onNodeDrop(draggingNode, dropNode, dropType) {
@@ -477,7 +496,7 @@ function save() {
   normalizeOrders();
   const err = validate();
   if (err) {
-    emit('toast', err, true);
+    showNotice(err);
     return;
   }
   applyRows(true);
@@ -489,7 +508,7 @@ function applyStructuralNow(label) {
   normalizeOrders();
   const err = validate();
   if (err) {
-    emit('toast', err, true);
+    showNotice(err);
     return false;
   }
   applyRows(false);
@@ -502,6 +521,10 @@ watch(() => props.visible, (v) => {
     buildRows();
   }
 }, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (noticeTimer) clearTimeout(noticeTimer);
+});
 </script>
 
 <style scoped>
@@ -509,20 +532,22 @@ watch(() => props.visible, (v) => {
   position: fixed;
   inset: 0;
   z-index: 4000;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(15, 23, 42, 0.42);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
 }
 .hier-panel {
-  width: min(960px, 92vw);
-  max-height: 84vh;
+  width: min(1080px, 94vw);
+  max-height: 86vh;
   display: flex;
   flex-direction: column;
   background: var(--y-panel, #ffffff);
-  border: 1px solid var(--y-border, #cbd5e1);
-  border-radius: 6px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
 }
 .hier-head,
 .hier-toolbar,
@@ -530,122 +555,225 @@ watch(() => props.visible, (v) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--y-border, #cbd5e1);
+  gap: 12px;
+  padding: 14px 20px;
+}
+.hier-head {
+  border-bottom: 1px solid #e2e8f0;
 }
 .hier-head h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 650;
   color: var(--y-text, #1f2937);
+}
+.hier-toolbar {
+  border-bottom: 1px solid #eef2f7;
+  background: #fbfcfe;
+}
+.hier-toolbar button {
+  height: 32px;
+  padding: 0 16px;
+  border: 1px solid #1a73e8;
+  border-radius: 8px;
+  background: #1a73e8;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .15s ease;
+}
+.hier-toolbar button:hover {
+  background: #1a64c9;
+  border-color: #1a64c9;
 }
 .hier-tip {
   font-size: 12px;
-  color: var(--y-muted, #64748b);
-}
-.hier-toolbar button {
-  height: 30px;
-  padding: 0 14px;
-  border: 1px solid var(--y-border, #cbd5e1);
-  border-radius: 4px;
-  background: var(--y-panel, #ffffff);
-  color: var(--y-text, #1f2937);
-  cursor: pointer;
-}
-.hier-toolbar button:hover {
-  border-color: var(--y-accent, #1a73e8);
-  color: var(--y-accent, #1a73e8);
-  background: var(--y-hover, #f1f5f9);
+  color: #8a94a6;
 }
 .hier-tree-wrap {
   flex: 1 1 auto;
   overflow: auto;
-  padding: 10px 14px;
-  min-height: 200px;
+  padding: 8px 18px 12px;
+  min-height: 220px;
+  background: #f8fafc;
 }
 .hier-empty {
-  padding: 30px;
+  padding: 40px;
   text-align: center;
   color: var(--y-muted, #64748b);
   font-size: 13px;
 }
+.hier-tree-wrap :deep(.el-tree) {
+  background: transparent;
+  color: #1f2937;
+  font-size: 13px;
+}
+.hier-tree-wrap :deep(.el-tree-node__content) {
+  height: auto;
+  min-height: 48px;
+  padding: 5px 8px;
+  border-bottom: 1px solid #e8edf4;
+  border-radius: 6px;
+  transition: background .12s ease;
+}
+.hier-tree-wrap :deep(.el-tree-node__content:hover) {
+  background: #f0f6ff;
+}
+.hier-tree-wrap :deep(.el-tree-node:focus > .el-tree-node__content) {
+  background: #e8f1fe;
+}
+.hier-tree-wrap :deep(.el-tree-node__expand-icon) {
+  color: #64748b;
+}
 .hier-node {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1 1 auto;
   min-width: 0;
-  padding-right: 6px;
 }
 .hier-level {
-  width: 34px;
   flex: 0 0 auto;
+  min-width: 38px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #e9edf3;
+  color: #526071;
   font-size: 11px;
-  color: var(--y-muted, #64748b);
+  text-align: center;
 }
 .hier-node input[type="text"] {
-  width: 180px;
-  height: 24px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 0 6px;
+  flex: 1 1 220px;
+  min-width: 120px;
+  height: 30px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  padding: 0 8px;
   font-size: 13px;
-  background: transparent;
+  background: #ffffff;
   color: var(--y-text, #1f2937);
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
 .hier-node:hover input[type="text"],
 .hier-node input[type="text"]:focus {
-  border-color: var(--y-border, #cbd5e1);
-  background: var(--y-panel, #ffffff);
+  border-color: #94b8f2;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, .10);
   outline: none;
 }
 .hier-important {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
-  color: var(--y-text, #1f2937);
+  color: #4b5563;
   white-space: nowrap;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.hier-important:hover {
+  background: #f1f5f9;
 }
 .hier-ops {
-  display: none;
-  gap: 4px;
-  margin-left: auto;
-}
-.hier-node:hover .hier-ops {
-  display: inline-flex;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 1;
+  transition: opacity .12s ease;
 }
 .hier-ops button {
-  height: 22px;
-  padding: 0 7px;
-  font-size: 11px;
-  border: 1px solid var(--y-border, #cbd5e1);
-  border-radius: 4px;
-  background: var(--y-panel, #ffffff);
-  color: var(--y-text, #1f2937);
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s ease, color .12s ease;
+}
+.hier-ops button:hover {
+  border-color: #94b8f2;
+  color: #1a73e8;
 }
 .hier-ops button.danger {
   color: #dc2626;
+  border-color: #f3d2d2;
+}
+.hier-ops button.danger:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: #fef2f2;
+}
+.hier-toast {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border: 1px solid #f1c9c9;
+  border-radius: 10px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 14px 38px rgba(127, 29, 29, .18);
+  color: #b91c1c;
+  font-size: 14px;
+  pointer-events: none;
+}
+.hier-toast-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hier-toast-enter-active,
+.hier-toast-leave-active {
+  transition: opacity .18s ease, transform .18s ease;
+}
+.hier-toast-enter-from,
+.hier-toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -46%);
 }
 .hier-foot {
-  border-top: 1px solid var(--y-border, #cbd5e1);
-  border-bottom: none;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcfe;
   justify-content: center;
 }
 .hier-foot button {
-  min-width: 96px;
-  height: 32px;
+  min-width: 92px;
+  height: 34px;
   padding: 0 18px;
-  border: 1px solid var(--y-border, #cbd5e1);
-  border-radius: 4px;
-  background: var(--y-panel, #ffffff);
-  color: var(--y-text, #1f2937);
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b5563;
   cursor: pointer;
+  font-size: 13px;
+  transition: border-color .12s ease, color .12s ease;
 }
 .hier-foot button:hover {
-  border-color: var(--y-accent, #1a73e8);
-  color: var(--y-accent, #1a73e8);
-  background: var(--y-hover, #f1f5f9);
+  border-color: #94b8f2;
+  color: #1a73e8;
+}
+.hier-foot #hier-save {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: #fff;
+}
+.hier-foot #hier-save:hover {
+  background: #1a64c9;
+  border-color: #1a64c9;
+  color: #fff;
 }
 </style>

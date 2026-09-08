@@ -61,9 +61,16 @@ def _ensure_id(doc_id: str) -> str:
 
 @router.get("", response_model=List[dict])
 async def list_docs(
+    ksid: Optional[str] = None,
+    lylx: Optional[str] = None,
+    lyid: Optional[str] = None,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    return ygt_store.list_docs()
+    return ygt_store.list_docs(
+        ksid=(ksid or "").strip() or None,
+        lylx=(lylx or "").strip() or None,
+        lyid=(lyid or "").strip() or None,
+    )
 
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
