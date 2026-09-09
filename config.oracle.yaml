@@ -1,0 +1,28 @@
+app:
+  host: "0.0.0.0"
+  port: 8766
+  api_prefix: "/api/v1"
+  static_dir: "vue/dist"
+  db_path: "data/yugutu.db"
+
+jwt:
+  secret_key: "yugutu-dev-secret-change-in-production"
+  issuer: "http://localhost:8766"
+  audience: "http://localhost:8766"
+  providers:
+    - secret_key: "EIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDI2a2EJ7m872v0afyoSDJT2o1+SitIeJSWtLJU8/Wz2m7gStexajkeD+Lka6DSTy8gt9UwfgVQo6uKjVLG5Ex7PiGOODVqAEghBuS7JzIYU5RvI543nNDAPfnJsas96mSA7L/mD7RTE2drj6hf3oZjJpMPZUQI/B1Qjb5H3K3PNwIDAQAB"
+      issuer: "http://localhost:5001"
+      audience: "http://localhost:5001"
+
+
+# Oracle 数据库配置示例：文件名含 oracle，单独给 Oracle 环境使用
+database:
+  type: "oracle"
+  host: "your_oracle_host"
+  port: 1521
+  username: "your_user"
+  password: "change-me"
+  database: "your_service"   # Oracle service_name
+  connect_timeout: 30
+  search_path: "public"
+  oracle_path: ""                 # 留空使用 thin 模式；如用客户端请填完整目录

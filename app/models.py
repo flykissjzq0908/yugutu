@@ -89,7 +89,7 @@ def _engine():
         )
         return create_engine(
             url,
-            connect_args={"connect_timeout": db.connect_timeout},
+            connect_args={"tcp_connect_timeout": float(db.connect_timeout)},
             pool_pre_ping=True,
         )
     db_path = Path(settings.app.db_path)

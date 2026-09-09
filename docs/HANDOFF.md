@@ -275,3 +275,38 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - 只新增 `CreateDialog.vue`、`FishPreview.vue` 与列表入口，不修改后端/编辑/保存/导出业务逻辑。
 - UI 示意图（3 套方向）仅存放在可视化临时目录，不纳入 V2.0。
 - 回归：`vue-create-dialog.js`、`vue-smoke.js`、`vue-preview-readonly.js` 通过。
+
+## 24. Oracle/独立打包交接（2026-09-09）
+
+- 最新提交：`1b1df53 feat: 文档列表过滤刷新与层级弹窗UI优化`
+- 基线提交：`28816c9 feat: 定稿鱼骨图 V2.0 新建弹窗与样式预览`
+- 分支：`main`，项目根：`D:\workgroup\yugutu_20260818`
+
+### 已实现/已定稿
+
+- V2.0 新建弹窗：模板卡片、7 套预设样式预览，创建后进入编辑器
+- 只读预览页：`?docId=xxx&view=preview`，仅缩放 + PNG/SVG/PDF 导出
+- 文档列表：`ksid/lylx/lyid` 过滤、刷新按钮
+- 层级弹窗：Figma 风格样式、第 5 级子节点限制、居中提示浮层
+- PDF 单页整图缩放，SVG 内容包围盒导出
+
+### 当前未提交
+
+- `app/models.py`：Oracle 连接超时参数改为 `tcp_connect_timeout`
+- `config.oracle.yaml`：Oracle 配置模板
+- `yugutu_standalone.spec`：独立打包 spec
+- `build_exe_standalone.bat`：独立打包脚本（`.gitignore` 忽略 `.bat`）
+- `standalone_dist/`：已生成 exe，但仍是 Oracle 修复前版本
+
+### 待办/未定稿
+
+- 线段拖动“挂点/子线长度保持”需求未定稿，相关 ygt-canvas 改动已回退
+- 重新打包：`build_exe_standalone.bat`
+- 提交：`app/models.py`、`config.oracle.yaml`、`yugutu_standalone.spec`
+
+### 使用说明
+
+- 独立版 exe：`standalone_dist\yugutu_standalone.exe`
+- Oracle 配置：先填 `config.oracle.yaml`，再覆盖 `config.yaml`
+- 重新打包前先构建前端，脚本已内置 `npm run build`
+
