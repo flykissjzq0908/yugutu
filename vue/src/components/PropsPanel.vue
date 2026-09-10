@@ -14,6 +14,7 @@
           <option :value="1">一级鱼刺</option>
           <option :value="2">二级鱼刺</option>
           <option :value="3">三级鱼刺</option>
+          <option :value="4">四级鱼刺</option>
         </select>
       </div>
       <div class="prop-divider"></div>
@@ -501,9 +502,10 @@ function applyGlobal() {
     width,
     height
   };
-  historyPush('应用' + (level === 1 ? '一级' : level === 2 ? '二级' : '三级') + '鱼刺设置');
+  const levelName = level === 1 ? '一级' : level === 2 ? '二级' : level === 3 ? '三级' : '四级';
+  historyPush('应用' + levelName + '鱼刺设置');
   emit('changed');
-  emit('toast', '已应用' + (level === 1 ? '一级' : level === 2 ? '二级' : '三级') + '鱼刺设置', false);
+  emit('toast', '已应用' + levelName + '鱼刺设置', false);
 }
 
 function historyPush(label) {

@@ -310,3 +310,14 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - Oracle 配置：先填 `config.oracle.yaml`，再覆盖 `config.yaml`
 - 重新打包前先构建前端，脚本已内置 `npm run build`
 
+## 25. 鱼骨图 V3.0 定稿（2026-09-10）
+
+- 定稿当前版本为鱼骨图 V3.0；V2.0 及之前历史功能与文档不回改。
+- Git：提交 V3.0 代码与文档，并创建标签 `v3.0`。
+- 层级弹窗新增节点/连线按当前画布同层级样式继承；第 4、5 级无独立定义时沿用最近一个已定义级别的完整样式。
+- 通用鱼刺设置的应用层级新增“四级鱼刺”。
+- 新增、删除、排序子鱼刺后，按兄弟顺序重算父线锚点比例，新增子线不再堆在父线中点。
+- 同步包含文档列表过滤刷新、Oracle 连接超时修复、`config.oracle.yaml` 与独立打包 spec。
+- 回归：`vue-hierarchy-style.js`、`vue-hierarchy-noop.js`、`vue-hierarchy-dialog.js`、`vue-preset7-style.js`、`vue-global-settings.js` 通过，均为 `errors: []`。
+- `standalone_dist/` 仍是本地生成的未跟踪目录，不纳入 Git。
+

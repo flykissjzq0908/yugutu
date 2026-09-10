@@ -357,7 +357,11 @@ window.YGT = window.YGT || {};
 
   function levelStyle(preset, level) {
     var st = styleOf(preset);
-    var ls = (st.levels || {})[level] || {};
+    var defs = st.levels || {};
+    // 4/5 级未单独定义时沿用最近一个已定义级别，避免回退到预设顶层样式。
+    var useLevel = level;
+    while (useLevel > 0 && !defs[useLevel]) useLevel -= 1;
+    var ls = useLevel > 0 ? (defs[useLevel] || {}) : {};
     return {
       finColor: ls.finColor || st.finColor,
       strokeWidth: ls.strokeWidth == null ? st.strokeWidth : ls.strokeWidth,

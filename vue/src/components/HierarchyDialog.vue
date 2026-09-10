@@ -322,18 +322,98 @@ function layoutPosition(row) {
   return { x: px + 150, y: py + (k - (n - 1) / 2) * 64 };
 }
 
-function nodeAttrs(row) {
-  return {
-    label: {
-      text: row.label || '',
-      fontSize: 13,
-      fill: row.important ? '#dc2626' : '#1f2937',
-      fontWeight: row.important ? '700' : '400'
-    },
-    body: row.important
-      ? { fill: '#fef2f2', stroke: '#dc2626' }
-      : { fill: '#ffffff', stroke: '#94a3b8' }
+function canvasPreset() {
+  const g = props.canvas.graph;
+  const head = g.getNodes().find((n) => n.shape === 'fish-head');
+  const d = head ? (head.getData() || {}) : {};
+  return d.ygtPreset || 'ygt1';
+}
+
+function levelNodeSample(level) {
+  const g = props.canvas.graph;
+  return g.getNodes().find((n) => {
+    if (n.shape !== 'bone-node' && n.shape !== 'group-node') return false;
+    const d = n.getData() || {};
+    return Number(d.level) === Number(level);
+  }) || null;
+}
+
+function sampleNodeAttrs(row) {
+  const src = levelNodeSample(row.level);
+  if (!src) return null;
+  const label = JSON.parse(JSON.stringify(src.attr('label') || {}));
+  const body = JSON.parse(JSON.stringify(src.attr('body') || {}));
+  label.text = row.label || '';
+  return { label, body };
+}
+
+function presetNodeAttrs(row) {
+  const shapes = window.YGT.shapes;
+  const important = !!row.important;
+  if (important || !shapes || typeof shapes.styleOf !== 'function' || typeof shapes.levelStyle !== 'function') {
+    return {
+      label: {
+        text: row.label || '',
+        fontSize: 13,
+        fill: important ? '#dc2626' : '#1f2937',
+        fontWeight: important ? '700' : '400'
+      },
+      body: important
+        ? { fill: '#fef2f2', stroke: '#dc2626' }
+        : { fill: '#ffffff', stroke: '#94a3b8' }
+    };
+  }
+  const preset = canvasPreset();
+  const st = shapes.styleOf(preset);
+  const ls = shapes.levelStyle(preset, row.level);
+  const label = {
+    text: row.label || '',
+    fontSize: ls.fontSize == null ? st.fontSize : ls.fontSize,
+    fill: ls.textColor || st.textColor || '#1f2937',
+    fontWeight: String(ls.fontWeight == null ? 400 : ls.fontWeight)
   };
+  const attrs = { label };
+  if (Number(row.level) === 1) {
+    attrs.body = { fill: st.finBgColor, stroke: ls.finColor };
+  }
+  return attrs;
+}
+
+function levelEdgeSample(level) {
+  const g = props.canvas.graph;
+  return g.getEdges().find((e) => {
+    if (e.shape !== 'bone-edge') return false;
+    const t = e.getTarget();
+    const tid = t && (t.cell || t);
+    const target = tid ? g.getCellById(tid) : null;
+    if (!target || (target.shape !== 'bone-node' && target.shape !== 'group-node')) return false;
+    const d = target.getData() || {};
+    return Number(d.level) === Number(level);
+  }) || null;
+}
+
+function sampleEdgeAttrs(level) {
+  const sample = levelEdgeSample(level);
+  if (sample) {
+    const line = sample.attr('line') || {};
+    return { line: JSON.parse(JSON.stringify(line)) };
+  }
+  const shapes = window.YGT.shapes;
+  if (shapes && typeof shapes.levelStyle === 'function' && typeof shapes.edgeLineAttrs === 'function') {
+    return shapes.edgeLineAttrs(shapes.levelStyle(canvasPreset(), level));
+  }
+  const marker = shapes && typeof shapes.blockMarkerAttrs === 'function'
+    ? shapes.blockMarkerAttrs(10, 8, 2)
+    : { name: 'block', width: 10, height: 8 };
+  return { line: { stroke: '#1a73e8', strokeWidth: 2, targetMarker: marker } };
+}
+
+function nodeAttrs(row) {
+  if (!row.important) {
+    const sampled = sampleNodeAttrs(row);
+    if (sampled) return sampled;
+  }
+  return presetNodeAttrs(row);
 }
 
 function incomingEdgeId(nodeId) {
@@ -448,7 +528,17 @@ function applyRows(applyStyles) {
       });
     });
 
-    const edgeDirtyIds = new Set(rows.value.filter((r) => !r.existing || r.needsLayout).map((r) => r.id));
+    const dirtyParentIds = new Set();
+    rows.value.forEach((r) => {
+      if (!r.existing || r.needsLayout || r.order !== r.origOrder) dirtyParentIds.add(r.parentId);
+    });
+    removeCells.forEach((n) => {
+      const d = n.getData() || {};
+      if (d.parentId) dirtyParentIds.add(d.parentId);
+    });
+    const edgeDirtyIds = new Set(rows.value.filter((r) =>
+      !r.existing || r.needsLayout || (r.level > 1 && dirtyParentIds.has(r.parentId))
+    ).map((r) => r.id));
 
     rows.value.slice().sort((a, b) => a.level - b.level).forEach((row) => {
       if (!row.needsLayout) return;
@@ -473,7 +563,7 @@ function applyRows(applyStyles) {
           shape: 'bone-edge',
           source: { x: 0, y: 0 },
           target: { cell: row.id, port: 'port-left' },
-          attrs: { line: { stroke: '#1a73e8', strokeWidth: 2, targetMarker: window.YGT.shapes.blockMarkerAttrs(10, 8, 2) } }
+          attrs: sampleEdgeAttrs(row.level)
         });
       }
       const nodePos = node.position();
@@ -481,9 +571,14 @@ function applyRows(applyStyles) {
         edge.setSource({ x: nodePos.x, y: spineY });
         edge.setTarget({ cell: row.id, port: nodePos.y + node.getSize().height / 2 < spineY ? 'port-bottom' : 'port-top' });
       } else {
+        const peers = rows.value
+          .filter((r) => r.parentId === row.parentId && r.level > 1)
+          .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+        const peerIndex = Math.max(0, peers.findIndex((r) => r.id === row.id));
+        const ratio = peers.length ? (peerIndex + 1) / (peers.length + 1) : 0.5;
         const parentEdgeId = incomingEdgeId(row.parentId);
         edge.setSource(parentEdgeId
-          ? { cell: parentEdgeId, anchor: { name: 'ratio', args: { ratio: 0.5 } } }
+          ? { cell: parentEdgeId, anchor: { name: 'ratio', args: { ratio } } }
           : { x: nodePos.x - 150, y: nodePos.y + node.getSize().height / 2 });
         edge.setTarget({ cell: row.id, port: 'port-left' });
       }
