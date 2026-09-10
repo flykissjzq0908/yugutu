@@ -45,7 +45,9 @@
             </div>
           </div>
           <LegacyHierarchyRebuildButton v-if="canvas && !previewOn && !exporting"
-                                        :canvas="canvas" @toast="toast" />
+                                        :canvas="canvas"
+                                        :ygtstyle="currentDoc ? currentDoc.ygtstyle : ''"
+                                        @toast="toast" />
         </div>
       </section>
       <PropsPanel
@@ -256,7 +258,8 @@ async function saveDoc() {
       title: doc.title,
       version: doc.version || '1.0',
       canvas: doc.canvas || { background: '#ffffff' },
-      cells: doc.cells
+      cells: doc.cells,
+      ygtstyle: doc.ygtstyle || null
     });
     currentDoc.value = saved;
     dirty.value = false;

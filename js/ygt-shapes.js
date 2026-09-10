@@ -195,9 +195,38 @@ window.YGT = window.YGT || {};
     };
   }
 
+  function validLegacyLine(line) {
+    return !!line &&
+      isFinite(Number(line.x1)) && isFinite(Number(line.y1)) &&
+      isFinite(Number(line.x2)) && isFinite(Number(line.y2));
+  }
+
+  function legacyLineConnector(sourcePoint, targetPoint, routePoints, options, edgeView) {
+    var cell = edgeView && edgeView.cell;
+    var data = cell && typeof cell.getData === 'function' ? (cell.getData() || {}) : {};
+    var line = data.legacyLine;
+    if (validLegacyLine(line)) {
+      var path = new X6.Path();
+      path.moveTo(Number(line.x1), Number(line.y1));
+      path.lineTo(Number(line.x2), Number(line.y2));
+      return path;
+    }
+    return [sourcePoint].concat(routePoints || []).concat([targetPoint]);
+  }
+
+  function registerLegacyLineConnector() {
+    if (window.X6 && X6.Graph && typeof X6.Graph.registerConnector === 'function') {
+      X6.Graph.registerConnector('legacy-line', legacyLineConnector, true);
+      return true;
+    }
+    return false;
+  }
+
   function registerShapes() {
     if (registered) return;
     registered = true;
+
+    registerLegacyLineConnector();
 
     X6.Graph.registerNode('fish-head', {
       inherit: 'rect',
@@ -998,6 +1027,8 @@ window.YGT = window.YGT || {};
     buildTemplate: buildTemplate,
     buildFromLegacyMx: buildFromLegacyMx,
     paletteGroups: paletteGroups,
+    validLegacyLine: validLegacyLine,
+    registerLegacyLineConnector: registerLegacyLineConnector,
     arrowLinePath: arrowLinePath,
     arrowLineLinePath: arrowLineLinePath,
     arrowLineHeadPath: arrowLineHeadPath

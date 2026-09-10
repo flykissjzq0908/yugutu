@@ -1,3 +1,11 @@
+const MAX_LAYOUT_LEVEL = 4;
+const FIXED_NODE_SIZES = {
+  1: { width: 120, height: 44 },
+  2: { width: 150, height: 36 },
+  3: { width: 140, height: 32 },
+  4: { width: 140, height: 32 }
+};
+
 function isBusiness(node) {
   return !!node && (node.shape === 'bone-node' || node.shape === 'group-node');
 }
@@ -10,6 +18,11 @@ function orderOf(node) {
 function levelOf(node) {
   const d = node.getData ? (node.getData() || {}) : {};
   return Number(d.level) || 0;
+}
+
+function fixedSizeFor(node) {
+  const level = Math.max(1, Math.min(MAX_LAYOUT_LEVEL, levelOf(node) || 1));
+  return FIXED_NODE_SIZES[level] || FIXED_NODE_SIZES[4];
 }
 
 function incomingEdgeOf(graph, node) {
@@ -25,7 +38,7 @@ function overlaps(a, b, padding) {
 function validateBoxes(nodes, positions) {
   const boxes = nodes.map((node) => {
     const pos = positions[node.id];
-    const size = node.getSize();
+    const size = fixedSizeFor(node);
     return { x: pos.x, y: pos.y, width: size.width, height: size.height };
   });
   for (let i = 0; i < boxes.length; i += 1) {
@@ -36,13 +49,37 @@ function validateBoxes(nodes, positions) {
   return true;
 }
 
-export function rebuildLegacyLayout(canvas) {
+function normalizePreset(value) {
+  const valid = new Set(['ygt1', 'ygt2', 'ygt3', 'ygt4', 'ygt5', 'ygt6', 'ygt7']);
+  function pick(candidate) {
+    if (candidate == null) return null;
+    if (typeof candidate === 'object') {
+      if (Array.isArray(candidate)) return pick(candidate[0]);
+      return pick(candidate.ygtstyle);
+    }
+    const text = String(candidate).trim();
+    if (valid.has(text)) return text;
+    try {
+      return pick(JSON.parse(text));
+    } catch (e) {
+      const match = text.match(/["']ygtstyle["']\s*:\s*["'](ygt[1-7])["']/);
+      return match ? match[1] : null;
+    }
+  }
+  return pick(value) || 'ygt7';
+}
+
+export function rebuildLegacyLayout(canvas, ygtstyleValue) {
   if (!canvas || !canvas.graph || !canvas.batch) {
     return { ok: false, message: '当前画布不支持层级重建' };
   }
   const graph = canvas.graph;
   const nodes = graph.getNodes().filter(isBusiness);
   if (!nodes.length) return { ok: false, message: '没有可重建的业务节点' };
+  const maxLevel = nodes.reduce((max, node) => Math.max(max, levelOf(node) || 0), 0);
+  if (maxLevel > MAX_LAYOUT_LEVEL) {
+    return { ok: false, message: '按层级重建布局最多支持 ' + MAX_LAYOUT_LEVEL + ' 级鱼刺' };
+  }
 
   const head = graph.getNodes().find((node) => node.shape === 'fish-head');
   const spine = graph.getNodes().find((node) => node.shape === 'fish-spine');
@@ -73,6 +110,8 @@ export function rebuildLegacyLayout(canvas) {
 
   const positions = {};
   const records = {};
+
+  const preset = normalizePreset(ygtstyleValue);
 
   function setRecord(node, source, targetPort) {
     records[node.id] = { source, targetPort };
@@ -140,7 +179,7 @@ export function rebuildLegacyLayout(canvas) {
     for (let pass = 0; pass < 8; pass += 1) {
       const boxes = nodes.map((node) => {
         const pos = positions[node.id];
-        const size = node.getSize();
+        const size = fixedSizeFor(node);
         return { node, pos, x: pos.x, y: pos.y, width: size.width, height: size.height };
       });
       const pairs = [];
@@ -181,6 +220,12 @@ export function rebuildLegacyLayout(canvas) {
     return { ok: false, message: '重建布局出现节点重叠，已取消操作' };
   }
 
+  const finalHeadData = Object.assign({}, head.getData() || {}, {
+    ygtPreset: preset,
+    ygtDir: (head.getData() || {}).ygtDir || 'toright'
+  });
+  head.setData(finalHeadData);
+
   const edgeUpdates = [];
   nodes.forEach((node) => {
     const record = records[node.id];
@@ -193,14 +238,23 @@ export function rebuildLegacyLayout(canvas) {
   canvas.batch(() => {
     nodes.forEach((node) => {
       const pos = positions[node.id];
+      const size = fixedSizeFor(node);
+      node.resize(size.width, size.height);
       if (pos) node.position(pos.x, pos.y);
     });
     edgeUpdates.forEach((item) => {
       item.edge.setSource(item.source);
       item.edge.setTarget({ cell: item.nodeId, port: item.targetPort });
     });
+    if (canvas.captureLegacyLines) {
+      canvas.captureLegacyLines(edgeUpdates.map((item) => item.edge.id));
+    }
+    const headData = head.getData() || {};
+    if (window.YGT && window.YGT.shapes && typeof window.YGT.shapes.applyPresetStyle === 'function') {
+      window.YGT.shapes.applyPresetStyle(graph, preset, headData.ygtDir || 'toright');
+    }
   });
   if (canvas.historyPush) canvas.historyPush('按层级重建布局');
   if (canvas.notifyChanged) canvas.notifyChanged();
-  return { ok: true, count: nodes.length };
+  return { ok: true, count: nodes.length, preset };
 }

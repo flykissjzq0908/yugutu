@@ -306,7 +306,7 @@ def get_doc(doc_id: str) -> Optional[Dict[str, Any]]:
     with engine.connect() as conn:
         row = conn.execute(
             text("""
-                SELECT xh, ygmc, cjrq, positions, leaftype, version
+                SELECT xh, ygmc, cjrq, ygtstyle, positions, leaftype, version
                 FROM hl_ygt
                 WHERE xh = :xh
             """),
@@ -321,6 +321,7 @@ def get_doc(doc_id: str) -> Optional[Dict[str, Any]]:
         "createdAt": row.cjrq.isoformat() if row.cjrq else None,
         "updatedAt": row.cjrq.isoformat() if row.cjrq else None,
         "leaftype": row.leaftype or "toright",
+        "ygtstyle": row.ygtstyle,
     }
     if row.positions:
         try:

@@ -8,10 +8,11 @@
 
 <script setup>
 import { ref } from 'vue';
-import { rebuildLegacyLayout } from '../legacy/rebuildLegacyLayout.js';
+import { rebuildLegacyLayout } from '../legacy/legacyLayoutAdapter.js';
 
 const props = defineProps({
-  canvas: { type: Object, required: true }
+  canvas: { type: Object, required: true },
+  ygtstyle: { type: String, default: '' }
 });
 const emit = defineEmits(['toast']);
 const busy = ref(false);
@@ -20,8 +21,9 @@ async function run() {
   if (busy.value) return;
   busy.value = true;
   try {
-    const result = rebuildLegacyLayout(props.canvas);
-    emit('toast', result.message || (result.ok ? '已按层级重建布局' : '重建布局失败'), !result.ok);
+    const result = await rebuildLegacyLayout(props.canvas, props.ygtstyle);
+    const message = result.message || (result.ok ? '已按层级重建布局，预设：' + result.preset : '重建布局失败');
+    emit('toast', message, !result.ok);
   } finally {
     busy.value = false;
   }

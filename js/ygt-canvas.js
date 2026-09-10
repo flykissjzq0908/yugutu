@@ -772,6 +772,7 @@ window.YGT = window.YGT || {};
         } else {
           terminalDrag.edge.setSource(terminalDrag.origin.source);
         }
+        clearLegacyLine(terminalDrag.edge);
         syncHierarchyFromLines();
         historyPush(terminalDrag.mode === 'source' ? '移动连线起点' : '移动连线终点');
         notifyChanged();
@@ -854,6 +855,7 @@ window.YGT = window.YGT || {};
       var dy = now.y - drag.startPos.y;
       var parentEdge = (graph.getIncomingEdges(hit.node) || []).find(function (x) { return x.shape === 'bone-edge'; });
       batch(function () {
+        clearLegacyLine(incoming);
         if (parentEdge) {
           incoming.setSource({ cell: parentEdge.id, anchor: { name: 'ratio', args: { ratio: 0.5 } } });
         } else {
@@ -925,13 +927,22 @@ window.YGT = window.YGT || {};
         historyPush('建立层级关系');
       }
     }
-    graph.on('edge:connected', function (args) { assignEdgeHierarchy(args.edge); ensureDotBridges(); });
+    graph.on('edge:connected', function (args) { clearLegacyLine(args.edge); assignEdgeHierarchy(args.edge); ensureDotBridges(); });
     graph.on('edge:added', function (args) { assignEdgeHierarchy(args.edge); ensureDotBridges(); });
     graph.on('cell:removed', notifyChanged);
     graph.on('edge:connected', notifyChanged);
-    graph.on('cell:change:position', notifyChanged);
+    graph.on('cell:change:position', function (args) {
+      if (!suppressLegacySync && args && args.cell && args.cell.isNode && args.cell.isNode()) {
+        updateLegacyAnchorsForSubtree(args.cell);
+      }
+      notifyChanged();
+    });
     graph.on('cell:change:attrs', notifyChanged);
-    graph.on('node:moved', function () { historyPush('移动节点'); });
+    graph.on('node:moved', function (args) {
+      var node = args && args.node;
+      if (!suppressLegacySync && node) updateLegacyAnchorsForSubtree(node);
+      historyPush('移动节点');
+    });
     graph.on('node:click', function (args) {
       if (args.node.shape === 'dot-node') args.node.toFront();
     });
@@ -1120,6 +1131,205 @@ window.YGT = window.YGT || {};
         }
       }
       return null;
+    }
+
+    var syncingLegacyLines = false;
+    var suppressLegacySync = false;
+
+    function hasLegacyLine(edge) {
+      if (!edge || edge.shape !== 'bone-edge' || typeof edge.getData !== 'function') return false;
+      var line = (edge.getData() || {}).legacyLine;
+      return !!(Y.shapes && typeof Y.shapes.validLegacyLine === 'function' && Y.shapes.validLegacyLine(line));
+    }
+
+    function clearLegacyLine(edge) {
+      if (!hasLegacyLine(edge)) return false;
+      var data = edge.getData() || {};
+      delete data.legacyLine;
+      delete data.legacyAnchorDistance;
+      edge.setData(data, { silent: true });
+      if (typeof edge.setConnector === 'function') edge.setConnector({ name: 'normal' });
+      if (typeof edge.findView === 'function') {
+        var view = edge.findView(graph);
+        if (view && typeof view.update === 'function') view.update();
+      }
+      return true;
+    }
+
+    function legacyIncomingEdge(node) {
+      if (!node) return null;
+      return (graph.getIncomingEdges(node) || []).find(function (edge) { return edge.shape === 'bone-edge'; }) || null;
+    }
+
+    function setLegacyLinePoint(edge, which, point) {
+      if (!edge || !point || !hasLegacyLine(edge)) return false;
+      var data = edge.getData() || {};
+      var line = Object.assign({}, data.legacyLine || {});
+      var x = Math.round(Number(point.x) * 1000) / 1000;
+      var y = Math.round(Number(point.y) * 1000) / 1000;
+      if (which === 'source') {
+        line.x1 = x;
+        line.y1 = y;
+      } else {
+        line.x2 = x;
+        line.y2 = y;
+      }
+      edge.setData(Object.assign({}, data, { legacyLine: line }), { silent: true });
+      if (typeof edge.findView === 'function') {
+        var view = edge.findView(graph);
+        if (view && typeof view.update === 'function') view.update();
+      }
+      return true;
+    }
+
+    function updateLegacyAnchorsForSubtree(node) {
+      if (!node || !node.isNode || !node.isNode()) return 0;
+      if (node.shape !== 'bone-node' && node.shape !== 'group-node') return 0;
+      var incoming = legacyIncomingEdge(node);
+      if (incoming && hasLegacyLine(incoming)) {
+        var target = incoming.getTarget && incoming.getTarget();
+        var source = incoming.getSource && incoming.getSource();
+        if (target && target.cell === node.id) {
+          setLegacyLinePoint(incoming, 'target', nodeTerminalPoint(node, target.port));
+        } else if (source && source.cell === node.id) {
+          setLegacyLinePoint(incoming, 'source', nodeTerminalPoint(node, source.port));
+        }
+      }
+
+      var children = {};
+      graph.getNodes().forEach(function (item) {
+        var data = item.getData && item.getData();
+        var pid = data && data.parentId;
+        if (!pid || pid === '__ROOT__') return;
+        (children[pid] = children[pid] || []).push(item);
+      });
+
+      var queue = [node];
+      var seen = {};
+      var changed = 0;
+      while (queue.length) {
+        var parent = queue.shift();
+        if (!parent || seen[parent.id]) continue;
+        seen[parent.id] = true;
+        (children[parent.id] || []).forEach(function (child) {
+          var childEdge = legacyIncomingEdge(child);
+          if (childEdge && hasLegacyLine(childEdge)) {
+            var src = childEdge.getSource && childEdge.getSource();
+            var sourcePoint = null;
+            if (src && src.cell) {
+              var sourceCell = graph.getCellById(src.cell);
+              if (sourceCell && sourceCell.isEdge && sourceCell.isEdge() && hasLegacyLine(sourceCell)) {
+                var sourceLine = (sourceCell.getData() || {}).legacyLine;
+                var childLine = (childEdge.getData() || {}).legacyLine;
+                var vx = Number(sourceLine.x2) - Number(sourceLine.x1);
+                var vy = Number(sourceLine.y2) - Number(sourceLine.y1);
+                var len = Math.sqrt(vx * vx + vy * vy);
+                var storedDistance = Number((childEdge.getData() || {}).legacyAnchorDistance);
+                if (!isFinite(storedDistance) || storedDistance < 0) {
+                  storedDistance = Math.sqrt(
+                    Math.pow(Number(childLine.x1) - Number(sourceLine.x1), 2) +
+                    Math.pow(Number(childLine.y1) - Number(sourceLine.y1), 2)
+                  );
+                }
+                if (len > 0.0001) {
+                  var currentDistance = Math.min(storedDistance, len);
+                  sourcePoint = {
+                    x: Number(sourceLine.x1) + (vx / len) * currentDistance,
+                    y: Number(sourceLine.y1) + (vy / len) * currentDistance
+                  };
+                } else {
+                  sourcePoint = { x: Number(sourceLine.x1), y: Number(sourceLine.y1) };
+                }
+                childEdge.setData(Object.assign({}, childEdge.getData() || {}, { legacyAnchorDistance: Math.round(storedDistance * 1000) / 1000 }), { silent: true });
+              } else if (sourceCell && sourceCell.isNode && sourceCell.isNode()) {
+                sourcePoint = nodeTerminalPoint(sourceCell, src.port);
+              }
+            }
+            if (sourcePoint && setLegacyLinePoint(childEdge, 'source', sourcePoint)) changed += 1;
+          }
+          queue.push(child);
+        });
+      }
+      return changed;
+    }
+
+    function legacyTerminalPoint(terminal, preferLegacy, depth) {
+      if (!terminal || depth > 16) return null;
+      if (typeof terminal.x === 'number' && typeof terminal.y === 'number') {
+        return { x: terminal.x, y: terminal.y };
+      }
+      var cellId = terminal.cell;
+      var cell = cellId ? graph.getCellById(cellId) : null;
+      if (!cell) return null;
+      if (cell.isNode && cell.isNode()) return nodeTerminalPoint(cell, terminal.port);
+      if (cell.isEdge && cell.isEdge()) {
+        if (preferLegacy) {
+          var line = (cell.getData && cell.getData() || {}).legacyLine;
+          if (Y.shapes && typeof Y.shapes.validLegacyLine === 'function' && Y.shapes.validLegacyLine(line)) {
+            var ratio = terminal.anchor && terminal.anchor.args && typeof terminal.anchor.args.ratio === 'number'
+              ? terminal.anchor.args.ratio
+              : 0.5;
+            return {
+              x: Number(line.x1) + (Number(line.x2) - Number(line.x1)) * ratio,
+              y: Number(line.y1) + (Number(line.y2) - Number(line.y1)) * ratio
+            };
+          }
+        }
+        return terminalModelPoint(terminal, depth);
+      }
+      return null;
+    }
+
+    function legacyEdgeLevel(edge) {
+      var target = edge && edge.getTarget && edge.getTarget();
+      var id = target && (target.cell || target);
+      var node = id ? graph.getCellById(id) : null;
+      var data = node && typeof node.getData === 'function' ? (node.getData() || {}) : {};
+      return Number(data.level) || 0;
+    }
+
+    function syncLegacyLines(options) {
+      var opts = options || {};
+      if (syncingLegacyLines || !graph || !Y.shapes || typeof Y.shapes.validLegacyLine !== 'function') return 0;
+      var allowed = opts.edgeIds ? new Set(opts.edgeIds) : null;
+      var edges = graph.getEdges().filter(function (edge) {
+        if (!edge || edge.shape !== 'bone-edge' || typeof edge.getData !== 'function') return false;
+        if (allowed && !allowed.has(edge.id)) return false;
+        return opts.preferLegacy ? hasLegacyLine(edge) : true;
+      });
+      edges.sort(function (a, b) { return legacyEdgeLevel(a) - legacyEdgeLevel(b); });
+      syncingLegacyLines = true;
+      var changed = 0;
+      try {
+        edges.forEach(function (edge) {
+          var source = legacyTerminalPoint(edge.getSource(), !!opts.preferLegacy, 0);
+          var target = legacyTerminalPoint(edge.getTarget(), !!opts.preferLegacy, 0);
+          if (!source || !target) return;
+          var line = {
+            x1: Math.round(source.x * 1000) / 1000,
+            y1: Math.round(source.y * 1000) / 1000,
+            x2: Math.round(target.x * 1000) / 1000,
+            y2: Math.round(target.y * 1000) / 1000
+          };
+          var data = edge.getData() || {};
+          var oldLine = data.legacyLine || {};
+          var same = Number(oldLine.x1) === line.x1 && Number(oldLine.y1) === line.y1 &&
+            Number(oldLine.x2) === line.x2 && Number(oldLine.y2) === line.y2;
+          if (!same || opts.forceCommit) {
+            var nextData = Object.assign({}, data, { legacyLine: line });
+            edge.setData(nextData, opts.silent ? { silent: true } : undefined);
+            if (typeof edge.setConnector === 'function') edge.setConnector({ name: 'legacy-line' });
+            if (opts.forceView && typeof edge.findView === 'function') {
+              var view = edge.findView(graph);
+              if (view && typeof view.update === 'function') view.update();
+            }
+            if (!same) changed += 1;
+          }
+        });
+      } finally {
+        syncingLegacyLines = false;
+      }
+      return changed;
     }
 
     function edgeEndpointPoint(edge, target) {
@@ -1627,6 +1837,7 @@ window.YGT = window.YGT || {};
     function detachTerminal(edge, isSource) {
       if (!edge || !edge.isEdge || !edge.isEdge()) return;
       var local = edgePointAt(edge, isSource ? 0 : 1);
+      clearLegacyLine(edge);
       if (isSource) edge.setSource({ x: local.x, y: local.y });
       else edge.setTarget({ x: local.x, y: local.y });
       historyPush(isSource ? '解除起点吸附' : '解除终点吸附');
@@ -1657,13 +1868,17 @@ window.YGT = window.YGT || {};
 
     // ---------- 文档操作 ----------
     function applyCells(cells) {
-      graph.fromJSON({ cells: Y.core.ensureHierarchy(cells || []) });
-      // 旧文档若保存了弯曲连线，加载时统一强制为直线
-      graph.getEdges().forEach(function (e) {
-        if (e.shape === 'bone-edge' && typeof e.setConnector === 'function') {
-          e.setConnector({ name: 'normal' });
-        }
-      });
+      suppressLegacySync = true;
+      try {
+        graph.fromJSON({ cells: Y.core.ensureHierarchy(cells || []) });
+        // 带 legacyLine 的边按保存的绝对坐标绘制；旧边继续使用普通直线。
+        graph.getEdges().forEach(function (e) {
+          if (e.shape !== 'bone-edge' || typeof e.setConnector !== 'function') return;
+          e.setConnector({ name: hasLegacyLine(e) ? 'legacy-line' : 'normal' });
+        });
+      } finally {
+        suppressLegacySync = false;
+      }
       // 归一化端口方向：修复旧文档中竖向/横向端口接反的问题（手动 portDir 优先）
       graph.getNodes().forEach(function (n) {
         reanchorPorts(n);
@@ -1747,7 +1962,16 @@ window.YGT = window.YGT || {};
     }
 
     function getCells() {
-      return graph.toJSON().cells;
+      var cells = graph.toJSON().cells;
+      // 持久化时保留旧版本可识别的 connector，legacyLine 载入后再由新版切换渲染。
+      cells.forEach(function (cell) {
+        if (!cell || cell.shape !== 'bone-edge') return;
+        var line = cell.data && cell.data.legacyLine;
+        if (Y.shapes && typeof Y.shapes.validLegacyLine === 'function' && Y.shapes.validLegacyLine(line)) {
+          cell.connector = { name: 'normal' };
+        }
+      });
+      return cells;
     }
 
     function repairDanglingEdges() {
@@ -1868,6 +2092,12 @@ window.YGT = window.YGT || {};
       applyCells: applyCells,
       getCells: getCells,
       syncHierarchyFromLines: syncHierarchyFromLines,
+      captureLegacyLines: function (edgeIds) {
+        return syncLegacyLines({ edgeIds: edgeIds || null, preferLegacy: false, forceView: true });
+      },
+      setLegacySyncSuppressed: function (value) {
+        suppressLegacySync = !!value;
+      },
       layoutByAngle: layoutByAngle,
       addDotOnEdge: addDotOnEdge,
       addDotOnNode: addDotOnNode,

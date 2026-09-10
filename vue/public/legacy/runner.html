@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0}.ygt-pw{display:none!important}#panel{position:absolute;left:-100000px;top:-100000px;width:12000px;height:6000px}</style></head>
+<body><div id="panel"></div>
+<script src="./jquery-1.8.0.min.js"></script>
+<script src="./raphael-min.js"></script>
+<script src="./raphael.export.js"></script>
+<script src="./raphael.ygt3.geometry.js"></script>
+<script src="./saveSvgAsPng.js"></script>
+<script>
+window.__YGT_LEGACY_RUN__ = function(payload) {
+  window.__YGT_LEGACY_COLLECT__ = { items: [], skeleton: null };
+  window.__YGT_LEGACY_FIXED_TEXT__ = !!payload.fixedText;
+  var items = payload.items || [];
+  var paper = draw_ygt3(items, 'panel', payload.title || '鱼骨图', payload.ygtstyle || 'ygt1', false, payload.dir || 'toright', null);
+  var result = {
+    ok: true,
+    items: window.__YGT_LEGACY_COLLECT__.items,
+    skeleton: window.__YGT_LEGACY_COLLECT__.skeleton,
+    preset: payload.ygtstyle || 'ygt1',
+    paperWidth: paper && paper.width,
+    paperHeight: paper && paper.height
+  };
+  try { if (paper) paper.clear(); } catch (e) {}
+  var panel = document.getElementById('panel'); if (panel) panel.innerHTML = '';
+  return result;
+};
+</script></body></html>
