@@ -86,12 +86,15 @@ logger.info("YGT 服务启动配置: host=%s port=%s database=%s", settings.app.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create tables on startup."""
+    """Initialize the application on startup."""
     logger.info("服务启动中...")
-    try:
-        ygt_store.ensure_tables()
-    except Exception as exc:  # pragma: no cover - startup only
-        logger.warning("建表失败: %s", exc)
+    if settings.database.type == "oracle":
+        logger.info("Oracle 模式跳过自动建表，使用现有 hl_ygt / hl_ygtmx 表")
+    else:
+        try:
+            ygt_store.ensure_tables()
+        except Exception as exc:  # pragma: no cover - startup only
+            logger.warning("建表失败: %s", exc)
     logger.info("服务启动成功")
     yield
 
@@ -139,13 +142,13 @@ if _static_dir.exists():
 if __name__ == "__main__":
     import uvicorn
 
-    # 打包为 exe 后目标机没有 Python，启动时直接打印带 token 的访问地址
+    # 打包为 exe 后目标机没有 Python，启动时记录带 token 的访问地址
     try:
         from app.scripts.make_token import make_token
 
-        print(f"开发访问地址: http://127.0.0.1:{settings.app.port}/?token={make_token()}")
-    except Exception:
-        pass
+        logger.info("开发访问地址: http://127.0.0.1:%s/?token=%s", settings.app.port, make_token())
+    except Exception as exc:
+        logger.warning("生成开发访问地址失败: %s", exc)
 
     uvicorn.run(
         app,

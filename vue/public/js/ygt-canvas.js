@@ -102,6 +102,7 @@ window.YGT = window.YGT || {};
     }
 
     var historyLog = [];
+    var suppressChangeNotify = false;
     var MAX_HISTORY_LOG = 30;
     function historyPush(label) {
       historyLog.unshift({ label: label, ts: Date.now(), undoDepth: history.getUndoSize() });
@@ -878,6 +879,7 @@ window.YGT = window.YGT || {};
 
     // ---------- 事件透传 ----------
     function notifyChanged() {
+      if (suppressChangeNotify) return;
       if (typeof o.onChanged === 'function') o.onChanged();
     }
     function notifySelection() {
@@ -1078,6 +1080,214 @@ window.YGT = window.YGT || {};
         return { x: s.x, y: s.y };
       }
       return null;
+    }
+
+    function normalizeAngleValue(angle) {
+      var n = Number(angle);
+      if (!isFinite(n)) n = 40;
+      return ((n % 360) + 360) % 360;
+    }
+
+    function nodeTerminalPoint(node, port) {
+      var b = node.getBBox();
+      if (port === 'port-left') return { x: b.x, y: b.y + b.height / 2 };
+      if (port === 'port-right') return { x: b.x + b.width, y: b.y + b.height / 2 };
+      if (port === 'port-top') return { x: b.x + b.width / 2, y: b.y };
+      if (port === 'port-bottom') return { x: b.x + b.width / 2, y: b.y + b.height };
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }
+
+    function terminalModelPoint(terminal, depth) {
+      if (!terminal || depth > 8) return null;
+      if (typeof terminal.x === 'number' && typeof terminal.y === 'number') {
+        return { x: terminal.x, y: terminal.y };
+      }
+      var cellId = terminal.cell;
+      var cell = cellId ? graph.getCellById(cellId) : null;
+      if (!cell) return null;
+      if (cell.isNode && cell.isNode()) return nodeTerminalPoint(cell, terminal.port);
+      if (cell.isEdge && cell.isEdge()) {
+        var ratio = terminal.anchor && terminal.anchor.args && typeof terminal.anchor.args.ratio === 'number'
+          ? terminal.anchor.args.ratio
+          : 0.5;
+        var s = terminalModelPoint(cell.getSource(), depth + 1);
+        var t = terminalModelPoint(cell.getTarget(), depth + 1);
+        if (s && t) {
+          return {
+            x: s.x + (t.x - s.x) * ratio,
+            y: s.y + (t.y - s.y) * ratio
+          };
+        }
+      }
+      return null;
+    }
+
+    function edgeEndpointPoint(edge, target) {
+      if (!edge || !edge.isEdge || !edge.isEdge()) return null;
+      var terminal = target ? (edge.getTarget && edge.getTarget()) : (edge.getSource && edge.getSource());
+      var modelPoint = terminalModelPoint(terminal, 0);
+      if (modelPoint) return modelPoint;
+      var p = target && typeof edge.getTargetPoint === 'function'
+        ? edge.getTargetPoint()
+        : (typeof edge.getSourcePoint === 'function' ? edge.getSourcePoint() : null);
+      if (p && typeof p.x === 'number' && typeof p.y === 'number') return { x: p.x, y: p.y };
+      return edgePointAt(edge, target ? 1 : 0);
+    }
+
+    function edgeAngleValue(edge) {
+      var s = edgeEndpointPoint(edge, false);
+      var t = edgeEndpointPoint(edge, true);
+      if (!s || !t) return null;
+      var dx = t.x - s.x;
+      var dy = t.y - s.y;
+      if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) return null;
+      return normalizeAngleValue(Math.atan2(dy, dx) * 180 / Math.PI);
+    }
+
+    function targetBusinessNode(edge) {
+      if (!edge || edge.shape !== 'bone-edge') return null;
+      var terminal = edge.getTarget && edge.getTarget();
+      var id = terminal && (terminal.cell || terminal);
+      var node = id ? graph.getCellById(id) : null;
+      if (!node || !node.isNode || !node.isNode()) return null;
+      if (node.shape !== 'bone-node' && node.shape !== 'group-node') return null;
+      var d = node.getData() || {};
+      if (d.level == null || d.order == null) return null;
+      return node;
+    }
+
+    function fishHeadDirection() {
+      var head = graph.getNodes().find(function (n) { return n.shape === 'fish-head'; });
+      var d = head && head.getData ? (head.getData() || {}) : {};
+      return d.ygtDir === 'toleft' ? 'toleft' : 'toright';
+    }
+
+    function desiredBusinessAngle(edge, baseAngle) {
+      var node = targetBusinessNode(edge);
+      if (!node) return null;
+      var d = node.getData() || {};
+      var level = Number(d.level);
+      var order = Number(d.order);
+      if (!isFinite(level) || !isFinite(order)) return null;
+      var even = order % 2 === 0;
+      var dir = fishHeadDirection();
+      if (level % 2 === 1) {
+        var ref;
+        if (level === 1) {
+          ref = dir === 'toleft' ? 180 : 0;
+        } else {
+          var parent = d.parentId ? graph.getCellById(d.parentId) : null;
+          var parentEdge = parent
+            ? (graph.getIncomingEdges(parent) || []).find(function (e) { return e.shape === 'bone-edge'; })
+            : null;
+          ref = parentEdge ? edgeAngleValue(parentEdge) : null;
+          if (ref == null) ref = dir === 'toleft' ? 180 : 0;
+        }
+        var leftward = Math.cos(ref * Math.PI / 180) < 0;
+        return leftward
+          ? normalizeAngleValue(even ? 180 + baseAngle : 180 - baseAngle)
+          : normalizeAngleValue(even ? 360 - baseAngle : baseAngle);
+      }
+      var forward = dir === 'toleft' ? 180 : 0;
+      return normalizeAngleValue(even ? forward : forward + 180);
+    }
+
+    function keepDomainAngle(edge, source, target, baseAngle, length) {
+      if (!source || !target) return baseAngle;
+      var node = targetBusinessNode(edge);
+      if (!node) return baseAngle;
+      var d = node.getData() || {};
+      var level = Number(d.level);
+      var order = Number(d.order);
+      if (!isFinite(level) || !isFinite(order)) return baseAngle;
+      var even = order % 2 === 0;
+      var dir = fishHeadDirection();
+      var xSign = 0;
+      var ySign = 0;
+      if (level % 2 === 1) {
+        ySign = even ? -1 : 1;
+      } else {
+        xSign = even
+          ? (dir === 'toleft' ? -1 : 1)
+          : (dir === 'toleft' ? 1 : -1);
+      }
+      var spine = graph.getNodes().find(function (n) { return n.shape === 'fish-spine'; });
+      var spineY = spine ? spine.position().y + spine.getSize().height / 2 : null;
+      var angle = baseAngle;
+      for (var i = 0; i < 4; i += 1) {
+        var rad = angle * Math.PI / 180;
+        var vx = length * Math.cos(rad);
+        var vy = length * Math.sin(rad);
+        if (xSign && Math.abs(vx) > 0.01 && vx * xSign < 0) {
+          angle = normalizeAngleValue(180 - angle);
+          continue;
+        }
+        if (ySign && spineY != null && Math.abs(source.y + vy - spineY) > 0.01 &&
+          (source.y + vy - spineY) * ySign < 0) {
+          angle = normalizeAngleValue(360 - angle);
+          continue;
+        }
+        return angle;
+      }
+      return angle;
+    }
+
+    function rotateBusinessTarget(edge, angle) {
+      var node = targetBusinessNode(edge);
+      if (!node) return false;
+      var s = edgeEndpointPoint(edge, false);
+      var t = edgeEndpointPoint(edge, true);
+      if (!s || !t) return false;
+      var dx = t.x - s.x;
+      var dy = t.y - s.y;
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (!(len > 0.01)) return false;
+      angle = keepDomainAngle(edge, s, t, angle, len);
+      var rad = angle * Math.PI / 180;
+      var nx = s.x + len * Math.cos(rad);
+      var ny = s.y + len * Math.sin(rad);
+      var moveX = nx - t.x;
+      var moveY = ny - t.y;
+      if (Math.abs(moveX) < 0.001 && Math.abs(moveY) < 0.001) return false;
+      var pos = node.position();
+      node.position(pos.x + moveX, pos.y + moveY);
+      return true;
+    }
+
+    function layoutByAngle(baseAngle, options) {
+      var opts = options || {};
+      var angle = normalizeAngleValue(baseAngle == null ? 40 : baseAngle);
+      var edges = graph.getEdges().filter(function (e) { return !!targetBusinessNode(e); });
+      edges.sort(function (a, b) {
+        var an = targetBusinessNode(a);
+        var bn = targetBusinessNode(b);
+        var ad = an ? (an.getData() || {}) : {};
+        var bd = bn ? (bn.getData() || {}) : {};
+        return Number(ad.level) - Number(bd.level) || Number(ad.order) - Number(bd.order);
+      });
+      var changed = 0;
+      var run = function () {
+        edges.forEach(function (edge) {
+          var desired = desiredBusinessAngle(edge, angle);
+          if (desired == null) return;
+          if (rotateBusinessTarget(edge, desired)) changed += 1;
+        });
+      };
+      var prevSuppress = suppressChangeNotify;
+      if (opts.silent && history && typeof history.disable === 'function') history.disable();
+      suppressChangeNotify = true;
+      try {
+        batch(run);
+      } finally {
+        suppressChangeNotify = prevSuppress;
+        if (opts.silent && history && typeof history.enable === 'function') history.enable();
+      }
+      if (opts.silent && history && typeof history.clean === 'function') history.clean();
+      if (changed && !opts.silent) {
+        historyPush('按角度刷新鱼骨图');
+        notifyChanged();
+      }
+      return changed;
     }
 
     function reanchorPorts(node) {
@@ -1658,6 +1868,7 @@ window.YGT = window.YGT || {};
       applyCells: applyCells,
       getCells: getCells,
       syncHierarchyFromLines: syncHierarchyFromLines,
+      layoutByAngle: layoutByAngle,
       addDotOnEdge: addDotOnEdge,
       addDotOnNode: addDotOnNode,
       reanchorPorts: reanchorPorts,

@@ -17,6 +17,14 @@
           <option :value="4">四级鱼刺</option>
         </select>
       </div>
+      <div class="prop-group">
+        <label class="prop-label">斜线角度</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input id="global-angle" type="number" min="0" max="360" step="1"
+                 :value="globalAngle" @change="globalAngle = Number($event.target.value)">
+          <button id="global-angle-apply" type="button" class="ghost" @click="applyAngleLayout">按角度刷新</button>
+        </div>
+      </div>
       <div class="prop-divider"></div>
       <h4 class="prop-section">线条</h4>
       <div class="prop-grid">
@@ -353,6 +361,7 @@ const canvasBg = ref('#ffffff');
 const spineDots = ref([]);
 const alignDisabled = ref(true);
 const globalLevel = ref(1);
+const globalAngle = ref(40);
 const global = reactive({
   lineColor: '#1a73e8', lineWidth: 2, arrow: 10,
   fontSize: 14, fontColor: '#1f2937', fontWeight: '400',
@@ -506,6 +515,22 @@ function applyGlobal() {
   historyPush('应用' + levelName + '鱼刺设置');
   emit('changed');
   emit('toast', '已应用' + levelName + '鱼刺设置', false);
+}
+
+function applyAngleLayout() {
+  var angle = Math.max(0, Math.min(360, Number(globalAngle.value) || 40));
+  globalAngle.value = angle;
+  if (!props.canvas || typeof props.canvas.layoutByAngle !== 'function') {
+    emit('toast', '当前画布不支持角度布局', true);
+    return;
+  }
+  var changed = props.canvas.layoutByAngle(angle, { silent: false });
+  if (!changed) {
+    emit('toast', '没有可处理的鱼刺线段', true);
+    return;
+  }
+  emit('changed');
+  emit('toast', '已按 ' + angle + '° 刷新鱼骨图', false);
 }
 
 function historyPush(label) {

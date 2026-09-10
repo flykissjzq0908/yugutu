@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+from PyInstaller.utils.hooks import collect_submodules
 
 datas = []
 
@@ -13,6 +14,8 @@ a = Analysis(
         "psycopg",
         "psycopg_binary",
         "oracledb",
+        "cryptography",
+        *collect_submodules("cryptography"),
         "sqlalchemy.dialects.postgresql.psycopg",
         "sqlalchemy.dialects.oracle.oracledb",
         "sqlalchemy.dialects.sqlite",

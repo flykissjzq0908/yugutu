@@ -695,15 +695,31 @@ window.YGT = window.YGT || {};
     function layoutNode(node, level, parent, parentEdgeId, index) {
       var id = node.id || ('mx_node_' + (edgeSeq++));
       var gx, gy;
+      var targetPort = 'port-left';
       if (level === 1) {
         gx = spineX0 + 80 + index * 150;
         gy = index % 2 === 0 ? spineY - 180 : spineY + 136;
       } else {
-        gx = (parent.x || 0) + 150;
         var kids = byParent[parent.id] || [];
         var k = kids.indexOf(node);
-        var n = kids.length;
-        gy = (parent.y || 0) + (k - (n - 1) / 2) * 64;
+        var forward = dir === 'toleft' ? -1 : 1;
+        if (level % 2 === 0) {
+          var towardForward = k % 2 === 0;
+          var sideSign = towardForward ? forward : -forward;
+          var sideKids = kids.filter(function (_, idx) { return (idx % 2 === 0) === towardForward; });
+          var sideIndex = Math.max(0, sideKids.indexOf(node));
+          var verticalDirection = (parent.y || 0) < spineY ? -1 : 1;
+          gx = (parent.x || 0) + sideSign * 150;
+          gy = (parent.y || 0) + verticalDirection * (sideIndex - (sideKids.length - 1) / 2) * 64;
+          targetPort = sideSign > 0 ? 'port-left' : 'port-right';
+        } else {
+          var sideUp = k % 2 === 0;
+          var upKids = kids.filter(function (_, idx) { return (idx % 2 === 0) === sideUp; });
+          var upIndex = Math.max(0, upKids.indexOf(node));
+          gx = (parent.x || 0) + forward * (150 + upIndex * 150);
+          gy = (parent.y || 0) + (sideUp ? -64 : 64);
+          targetPort = forward > 0 ? 'port-left' : 'port-right';
+        }
       }
       var important = !!node.important;
       var order = level === 1 ? index : (byParent[parent.id] || []).indexOf(node);
@@ -737,10 +753,12 @@ window.YGT = window.YGT || {};
           target: { cell: id, port: index % 2 === 0 ? 'port-bottom' : 'port-top' }
         });
       } else {
+        var siblingCount = (byParent[parent.id] || []).length;
+        var ratio = siblingCount > 0 ? (order + 1) / (siblingCount + 1) : 0.5;
         cells.push({
           id: edgeId, shape: 'bone-edge',
-          source: { cell: parentEdgeId, anchor: { name: 'ratio', args: { ratio: 0.5 } } },
-          target: { cell: id, port: 'port-left' }
+          source: { cell: parentEdgeId, anchor: { name: 'ratio', args: { ratio: ratio } } },
+          target: { cell: id, port: targetPort }
         });
       }
       (byParent[id] || []).forEach(function (child, ci) {

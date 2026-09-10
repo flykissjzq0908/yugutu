@@ -321,3 +321,15 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - 回归：`vue-hierarchy-style.js`、`vue-hierarchy-noop.js`、`vue-hierarchy-dialog.js`、`vue-preset7-style.js`、`vue-global-settings.js` 通过，均为 `errors: []`。
 - `standalone_dist/` 仍是本地生成的未跟踪目录，不纳入 Git。
 
+## 26. 鱼骨图 V3.1 定稿（2026-09-10）
+
+- 定稿当前版本为鱼骨图 V3.1；V3.0 及之前历史功能与文档不回改。
+- 新增“斜线角度”和“按角度刷新鱼骨图”：按层级、order 奇偶、鱼头方向计算，仅在主动刷新时执行。
+- `layoutByAngle()` 增加上下/左右半平面约束，避免刷新后线段越界。
+- 无位置数据初始化改为按层级和 order 奇偶布局，同级父线锚点按比例分配。
+- 顶部/底部鱼刺子节点按父线方向展开，无位置布局相交检测为 `pairs: []`。
+- 无位置数据载入不再自动调用角度刷新。
+- Oracle 模式启动时跳过自动建表，使用现有 `hl_ygt` / `hl_ygtmx` 表。
+- 回归：`vue-angle-layout.js`、`vue-legacy-ratio.js`、`vue-hierarchy-noop.js` 通过。
+- 本次不提交 `temp/` 与 `standalone_dist/`。
+
