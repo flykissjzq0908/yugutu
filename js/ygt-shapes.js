@@ -636,6 +636,171 @@ window.YGT = window.YGT || {};
     });
   }
 
+  function legacyIsBusiness(cell) {
+    return !!cell && (cell.shape === 'bone-node' || cell.shape === 'group-node');
+  }
+
+  function legacyPortPoint(cell, port) {
+    var x = Number(cell.x) || 0;
+    var y = Number(cell.y) || 0;
+    var w = Number(cell.width) || 0;
+    var h = Number(cell.height) || 0;
+    if (port === 'port-left') return { x: x, y: y + h / 2 };
+    if (port === 'port-right') return { x: x + w, y: y + h / 2 };
+    if (port === 'port-top') return { x: x + w / 2, y: y };
+    if (port === 'port-bottom') return { x: x + w / 2, y: y + h };
+    return { x: x + w / 2, y: y + h / 2 };
+  }
+
+  function legacyTerminalPoint(terminal, byId, depth) {
+    if (!terminal || depth > 8) return null;
+    if (typeof terminal.x === 'number' && typeof terminal.y === 'number') {
+      return { x: terminal.x, y: terminal.y };
+    }
+    var cell = terminal.cell ? byId[terminal.cell] : null;
+    if (!cell) return null;
+    if (legacyIsBusiness(cell)) return legacyPortPoint(cell, terminal.port);
+    if (cell.shape === 'bone-edge') {
+      var source = legacyTerminalPoint(cell.source, byId, depth + 1);
+      var target = legacyTerminalPoint(cell.target, byId, depth + 1);
+      if (!source || !target) return null;
+      var ratio = terminal.anchor && terminal.anchor.args && typeof terminal.anchor.args.ratio === 'number'
+        ? terminal.anchor.args.ratio
+        : 0.5;
+      return {
+        x: source.x + (target.x - source.x) * ratio,
+        y: source.y + (target.y - source.y) * ratio
+      };
+    }
+    return null;
+  }
+
+  function legacySegmentCross(a, b, c, d) {
+    function cross(p, q, r) {
+      return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    }
+    var o1 = cross(a, b, c);
+    var o2 = cross(a, b, d);
+    var o3 = cross(c, d, a);
+    var o4 = cross(c, d, b);
+    return o1 * o2 < 0 && o3 * o4 < 0;
+  }
+
+  function legacyRectOverlap(a, b, padding) {
+    var pad = padding == null ? 10 : padding;
+    return a.x < b.x + b.width + pad && a.x + a.width + pad > b.x &&
+      a.y < b.y + b.height + pad && a.y + a.height + pad > b.y;
+  }
+
+  function legacyValidateLayout(cells) {
+    var byId = {};
+    cells.forEach(function (cell) { if (cell && cell.id) byId[cell.id] = cell; });
+    var nodes = cells.filter(legacyIsBusiness);
+    for (var i = 0; i < nodes.length; i += 1) {
+      for (var j = i + 1; j < nodes.length; j += 1) {
+        if (legacyRectOverlap(nodes[i], nodes[j], 8)) return false;
+      }
+    }
+    var edges = cells.filter(function (cell) { return cell && cell.shape === 'bone-edge'; });
+    for (var m = 0; m < edges.length; m += 1) {
+      var s1 = legacyTerminalPoint(edges[m].source, byId, 0);
+      var t1 = legacyTerminalPoint(edges[m].target, byId, 0);
+      if (!s1 || !t1) continue;
+      for (var n = m + 1; n < edges.length; n += 1) {
+        var s2 = legacyTerminalPoint(edges[n].source, byId, 0);
+        var t2 = legacyTerminalPoint(edges[n].target, byId, 0);
+        if (!s2 || !t2) continue;
+        if (legacySegmentCross(s1, t1, s2, t2)) return false;
+      }
+    }
+    return true;
+  }
+
+  function resolveLegacyOverlaps(cells, spineY, dir) {
+    var original = JSON.parse(JSON.stringify(cells || []));
+    var byId = {};
+    var children = {};
+    cells.forEach(function (cell) {
+      if (!cell || !cell.id) return;
+      byId[cell.id] = cell;
+      if (!legacyIsBusiness(cell)) return;
+      var parentId = cell.data && cell.data.parentId;
+      if (parentId) (children[parentId] = children[parentId] || []).push(cell);
+    });
+
+    function moveSubtree(cell, dx, dy, seen) {
+      if (!cell || !cell.id || (seen && seen[cell.id])) return;
+      if (seen) seen[cell.id] = true;
+      cell.x = (Number(cell.x) || 0) + dx;
+      cell.y = (Number(cell.y) || 0) + dy;
+      (children[cell.id] || []).forEach(function (child) {
+        moveSubtree(child, dx, dy, seen || {});
+      });
+    }
+
+    function overlapPairs() {
+      var nodes = cells.filter(legacyIsBusiness);
+      var pairs = [];
+      for (var i = 0; i < nodes.length; i += 1) {
+        for (var j = i + 1; j < nodes.length; j += 1) {
+          if (legacyRectOverlap(nodes[i], nodes[j], 10)) pairs.push([nodes[i], nodes[j]]);
+        }
+      }
+      pairs.sort(function (a, b) {
+        var ad = Number((a[0].data || {}).level) || 0;
+        var bd = Number((b[0].data || {}).level) || 0;
+        return bd - ad;
+      });
+      return pairs;
+    }
+
+    for (var pass = 0; pass < 5; pass += 1) {
+      var pairs = overlapPairs();
+      if (!pairs.length) break;
+      var moved = false;
+      pairs.forEach(function (pair) {
+        if (!legacyRectOverlap(pair[0], pair[1], 10)) return;
+        var a = pair[0];
+        var b = pair[1];
+        var al = Number((a.data || {}).level) || 0;
+        var bl = Number((b.data || {}).level) || 0;
+        var mover = al >= bl ? a : b;
+        var fixed = mover === a ? b : a;
+        if (al === bl) {
+          var ao = Number((a.data || {}).order) || 0;
+          var bo = Number((b.data || {}).order) || 0;
+          mover = ao >= bo ? a : b;
+          fixed = mover === a ? b : a;
+        }
+        var level = Number((mover.data || {}).level) || 1;
+        var order = Number((mover.data || {}).order) || 0;
+        var pad = 18;
+        if (level % 2 === 1) {
+          var ySign = order % 2 === 0 ? -1 : 1;
+          var targetY = ySign < 0
+            ? fixed.y - mover.height - pad
+            : fixed.y + fixed.height + pad;
+          var dy = targetY - mover.y;
+          if (Math.abs(dy) < 1) dy = ySign * 24;
+          moveSubtree(mover, 0, dy, {});
+        } else {
+          var forward = dir === 'toleft' ? -1 : 1;
+          var xSign = (order % 2 === 0) ? forward : -forward;
+          var targetX = xSign < 0
+            ? fixed.x - mover.width - pad
+            : fixed.x + fixed.width + pad;
+          var dx = targetX - mover.x;
+          if (Math.abs(dx) < 1) dx = xSign * 24;
+          moveSubtree(mover, dx, 0, {});
+        }
+        moved = true;
+      });
+      if (!moved) break;
+    }
+    if (legacyValidateLayout(cells)) return cells;
+    return original;
+  }
+
   // 从 hl_ygtmx 重建鱼骨图（旧数据 positions 为空时由前端自动布局）
   function buildFromLegacyMx(mx, dir, title) {
     dir = dir === 'toleft' ? 'toleft' : 'toright';
@@ -766,6 +931,7 @@ window.YGT = window.YGT || {};
       });
     }
     roots.forEach(function (root, i) { layoutNode(root, 1, null, null, i); });
+    cells = resolveLegacyOverlaps(cells, spineY, dir);
     return cells;
   }
 
