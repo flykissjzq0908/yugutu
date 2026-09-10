@@ -44,6 +44,8 @@
               <button type="button" @click="runExport('pdf')">PDF</button>
             </div>
           </div>
+          <LegacyHierarchyRebuildButton v-if="canvas && !previewOn && !exporting"
+                                        :canvas="canvas" @toast="toast" />
         </div>
       </section>
       <PropsPanel
@@ -77,6 +79,7 @@ import EditorToolbar from '../components/EditorToolbar.vue';
 import PropsPanel from '../components/PropsPanel.vue';
 import GuideDialog from '../components/GuideDialog.vue';
 import HierarchyDialog from '../components/HierarchyDialog.vue';
+import LegacyHierarchyRebuildButton from '../components/LegacyHierarchyRebuildButton.vue';
 import { icons } from '../components/icons';
 import { ygtApi } from '../api/ygt';
 import { errorMessage } from '../api/client';
