@@ -935,6 +935,9 @@ window.YGT = window.YGT || {};
       if (!suppressLegacySync && args && args.cell && args.cell.isNode && args.cell.isNode()) {
         clearLegacyLinesForSubtree(args.cell);
       }
+      if (!suppressLegacySync && args && args.cell && args.cell.shape === 'text-node') {
+        reanchorPorts(args.cell);
+      }
       notifyChanged();
     });
     graph.on('cell:change:attrs', notifyChanged);
@@ -1157,7 +1160,7 @@ window.YGT = window.YGT || {};
 
     function clearLegacyLinesForSubtree(node) {
       if (!node || !node.isNode || !node.isNode()) return 0;
-      if (node.shape !== 'bone-node' && node.shape !== 'group-node') return 0;
+      if (node.shape !== 'bone-node' && node.shape !== 'group-node' && node.shape !== 'text-node') return 0;
       var children = {};
       graph.getNodes().forEach(function (item) {
         var data = item.getData && item.getData();
@@ -1451,13 +1454,29 @@ window.YGT = window.YGT || {};
           port = 'port-' + dir;
         }
         else {
-          var p = parentAnchorPoint(edge);
+          var sourceTerminal = edge.getSource && edge.getSource();
+          var p = node.shape === 'text-node'
+            ? (terminalModelPoint(sourceTerminal, 0) || parentAnchorPoint(edge))
+            : parentAnchorPoint(edge);
           if (p) {
             var b = node.getBBox();
             var cx = b.x + b.width / 2;
             var cy = b.y + b.height / 2;
-            var axis = isH ? 'h' : (isV ? 'v' : (Math.abs(p.x - cx) >= Math.abs(p.y - cy) ? 'h' : 'v'));
-            port = axis === 'h' ? (p.x <= cx ? 'port-left' : 'port-right') : (p.y <= cy ? 'port-top' : 'port-bottom');
+            if (node.shape === 'text-node') {
+              // 按拖动后的源端到文本框中心方向自动选边，避免受原端口位置影响。
+              var ax = cx - p.x;
+              var ay = cy - p.y;
+              var arrowAxis = Math.abs(ax) >= Math.abs(ay) ? 'h' : 'v';
+              port = arrowAxis === 'h'
+                ? (ax >= 0 ? 'port-left' : 'port-right')
+                : (ay >= 0 ? 'port-top' : 'port-bottom');
+            } else {
+              var dx = p.x - cx;
+              var dy = p.y - cy;
+              var autoAxis = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+              var axis = isH ? 'h' : (isV ? 'v' : autoAxis);
+              port = axis === 'h' ? (dx <= 0 ? 'port-left' : 'port-right') : (dy <= 0 ? 'port-top' : 'port-bottom');
+            }
           }
         }
         if (port && t.port !== port) {
