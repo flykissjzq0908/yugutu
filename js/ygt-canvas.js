@@ -933,14 +933,14 @@ window.YGT = window.YGT || {};
     graph.on('edge:connected', notifyChanged);
     graph.on('cell:change:position', function (args) {
       if (!suppressLegacySync && args && args.cell && args.cell.isNode && args.cell.isNode()) {
-        updateLegacyAnchorsForSubtree(args.cell);
+        clearLegacyLinesForSubtree(args.cell);
       }
       notifyChanged();
     });
     graph.on('cell:change:attrs', notifyChanged);
     graph.on('node:moved', function (args) {
       var node = args && args.node;
-      if (!suppressLegacySync && node) updateLegacyAnchorsForSubtree(node);
+      if (!suppressLegacySync && node) clearLegacyLinesForSubtree(node);
       historyPush('移动节点');
     });
     graph.on('node:click', function (args) {
@@ -1146,7 +1146,6 @@ window.YGT = window.YGT || {};
       if (!hasLegacyLine(edge)) return false;
       var data = edge.getData() || {};
       delete data.legacyLine;
-      delete data.legacyAnchorDistance;
       edge.setData(data, { silent: true });
       if (typeof edge.setConnector === 'function') edge.setConnector({ name: 'normal' });
       if (typeof edge.findView === 'function') {
@@ -1156,100 +1155,34 @@ window.YGT = window.YGT || {};
       return true;
     }
 
-    function legacyIncomingEdge(node) {
-      if (!node) return null;
-      return (graph.getIncomingEdges(node) || []).find(function (edge) { return edge.shape === 'bone-edge'; }) || null;
-    }
-
-    function setLegacyLinePoint(edge, which, point) {
-      if (!edge || !point || !hasLegacyLine(edge)) return false;
-      var data = edge.getData() || {};
-      var line = Object.assign({}, data.legacyLine || {});
-      var x = Math.round(Number(point.x) * 1000) / 1000;
-      var y = Math.round(Number(point.y) * 1000) / 1000;
-      if (which === 'source') {
-        line.x1 = x;
-        line.y1 = y;
-      } else {
-        line.x2 = x;
-        line.y2 = y;
-      }
-      edge.setData(Object.assign({}, data, { legacyLine: line }), { silent: true });
-      if (typeof edge.findView === 'function') {
-        var view = edge.findView(graph);
-        if (view && typeof view.update === 'function') view.update();
-      }
-      return true;
-    }
-
-    function updateLegacyAnchorsForSubtree(node) {
+    function clearLegacyLinesForSubtree(node) {
       if (!node || !node.isNode || !node.isNode()) return 0;
       if (node.shape !== 'bone-node' && node.shape !== 'group-node') return 0;
-      var incoming = legacyIncomingEdge(node);
-      if (incoming && hasLegacyLine(incoming)) {
-        var target = incoming.getTarget && incoming.getTarget();
-        var source = incoming.getSource && incoming.getSource();
-        if (target && target.cell === node.id) {
-          setLegacyLinePoint(incoming, 'target', nodeTerminalPoint(node, target.port));
-        } else if (source && source.cell === node.id) {
-          setLegacyLinePoint(incoming, 'source', nodeTerminalPoint(node, source.port));
-        }
-      }
-
       var children = {};
       graph.getNodes().forEach(function (item) {
         var data = item.getData && item.getData();
         var pid = data && data.parentId;
         if (!pid || pid === '__ROOT__') return;
-        (children[pid] = children[pid] || []).push(item);
+        (children[pid] = children[pid] || []).push(item.id);
       });
-
-      var queue = [node];
-      var seen = {};
-      var changed = 0;
+      var ids = {};
+      var queue = [node.id];
       while (queue.length) {
-        var parent = queue.shift();
-        if (!parent || seen[parent.id]) continue;
-        seen[parent.id] = true;
-        (children[parent.id] || []).forEach(function (child) {
-          var childEdge = legacyIncomingEdge(child);
-          if (childEdge && hasLegacyLine(childEdge)) {
-            var src = childEdge.getSource && childEdge.getSource();
-            var sourcePoint = null;
-            if (src && src.cell) {
-              var sourceCell = graph.getCellById(src.cell);
-              if (sourceCell && sourceCell.isEdge && sourceCell.isEdge() && hasLegacyLine(sourceCell)) {
-                var sourceLine = (sourceCell.getData() || {}).legacyLine;
-                var childLine = (childEdge.getData() || {}).legacyLine;
-                var vx = Number(sourceLine.x2) - Number(sourceLine.x1);
-                var vy = Number(sourceLine.y2) - Number(sourceLine.y1);
-                var len = Math.sqrt(vx * vx + vy * vy);
-                var storedDistance = Number((childEdge.getData() || {}).legacyAnchorDistance);
-                if (!isFinite(storedDistance) || storedDistance < 0) {
-                  storedDistance = Math.sqrt(
-                    Math.pow(Number(childLine.x1) - Number(sourceLine.x1), 2) +
-                    Math.pow(Number(childLine.y1) - Number(sourceLine.y1), 2)
-                  );
-                }
-                if (len > 0.0001) {
-                  var currentDistance = Math.min(storedDistance, len);
-                  sourcePoint = {
-                    x: Number(sourceLine.x1) + (vx / len) * currentDistance,
-                    y: Number(sourceLine.y1) + (vy / len) * currentDistance
-                  };
-                } else {
-                  sourcePoint = { x: Number(sourceLine.x1), y: Number(sourceLine.y1) };
-                }
-                childEdge.setData(Object.assign({}, childEdge.getData() || {}, { legacyAnchorDistance: Math.round(storedDistance * 1000) / 1000 }), { silent: true });
-              } else if (sourceCell && sourceCell.isNode && sourceCell.isNode()) {
-                sourcePoint = nodeTerminalPoint(sourceCell, src.port);
-              }
-            }
-            if (sourcePoint && setLegacyLinePoint(childEdge, 'source', sourcePoint)) changed += 1;
-          }
-          queue.push(child);
-        });
+        var id = queue.shift();
+        if (!id || ids[id]) continue;
+        ids[id] = true;
+        (children[id] || []).forEach(function (childId) { queue.push(childId); });
       }
+      var changed = 0;
+      graph.getEdges().forEach(function (edge) {
+        if (!hasLegacyLine(edge)) return;
+        var source = edge.getSource && edge.getSource();
+        var target = edge.getTarget && edge.getTarget();
+        var sourceId = source && (source.cell || source);
+        var targetId = target && (target.cell || target);
+        if (!ids[sourceId] && !ids[targetId]) return;
+        if (clearLegacyLine(edge)) changed += 1;
+      });
       return changed;
     }
 

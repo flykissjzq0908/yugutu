@@ -333,3 +333,61 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - 回归：`vue-angle-layout.js`、`vue-legacy-ratio.js`、`vue-hierarchy-noop.js` 通过。
 - 本次不提交 `temp/` 与 `standalone_dist/`。
 
+## 27. 鱼骨图 V4.0 定稿与挂点回退（2026-09-11）
+
+### 版本与 Git
+
+- 当前定稿：鱼骨图 V4.0，Git 提交 `ba137d3`，标签 `v4.0`，分支 `main`。
+- `vue/package.json` 版本已同步为 `4.0.0`。
+- 版本记录：`README.md`、`docs/ygt-version-history.md` 顶部已有 V4.0 定稿节。
+- V4.0 之前：`ebc3f7d` 无位置布局局部避让、`ae45263` 新增按层级重建布局按钮。
+- 未推送远端，只做本地提交。
+
+### V4.0 已实现
+
+- 新增旧 Raphael 渲染器引擎，按层级重建布局时默认优先使用，失败回退纯算法。
+- 新增文件：`vue/src/legacy/legacyLayoutAdapter.js`、`rendererLegacyLayout.js`、`rebuildLegacyLayout.js`、`vue/src/components/LegacyHierarchyRebuildButton.vue`。
+- 新增 `vue/public/legacy/`：jQuery 1.8.0、Raphael、导出脚本、`runner.html`、带几何导出钩子的 `raphael.ygt3.geometry.js`。
+- 旧算法导出节点文字坐标、线段 `x1/y1/x2/y2`、层级、顺序、角度、鱼头鱼尾鱼干位置。
+- `legacyLine` 几何数据支持写入、保存、载入；用户编辑这类边时清除 `legacyLine` 恢复普通边。
+- 最大支持到 4 级鱼刺。
+- 验证：同一 `docId=2727f488dc26-4e26-986e-1a6578edd5c5`，旧算法与 X6 线段坐标误差 `0.0`，保存后重新载入一致。
+
+### 挂点问题时间线（重要）
+
+- 提问点提交：`ae45263`。当时实现是 `clearLegacyLinesForSubtree`：拖动节点时清除受影响子树的 `legacyLine`，退回普通边。
+- 该提问之后新增了“挂点距离传播”：`updateLegacyAnchorsForSubtree` + `legacyAnchorDistance`，父线变化时按“父线起点 + 单位方向 x 原距离”重算子线挂点。
+- 该实现存在 bug，已在 2026-09-11 回退：
+  1. 被拖节点自身的入边被当成子边处理，挂点被强行设成节点端口点。
+  2. 初始距离用欧氏距离而非沿线投影，第一次拖动即产生偏移。
+  3. 每个节点各跑一遍全图 children 表并 BFS 整棵子树；`cell:change:position` 与 `node:moved` 双重触发。
+  4. `childEdge.setData(..., { silent: true })` 保存距离时未同步刷新视图。
+- 回退范围仅两个文件：`js/ygt-canvas.js`、`vue/public/js/ygt-canvas.js`，退回 `clearLegacyLinesForSubtree` 版本。
+- 回退后 `legacyLine` 持久化、`captureLegacyLines`、`setLegacySyncSuppressed`、旧渲染器引擎、按层级重建布局按钮均保留。
+
+### 本次回退备份
+
+- 回退前 V4.0 挂点实现快照：`.rollback/v40_anchor_before_restore_20260911_093000`
+- 恢复命令：`python .rollback\v40_anchor_before_restore_20260911_093000\restore.py`
+- 提问点原快照：`.rollback/anchor_follow_before_20260911_025043`（即 `ae45263` 状态）
+- 注意：执行 `restore.py` 会把有 bug 的挂点距离传播改回来，仅在确认要恢复该实现时使用。
+
+### 当前未提交改动（新会话接手点）
+
+- `js/ygt-canvas.js`、`vue/public/js/ygt-canvas.js`：挂点回退，尚未提交。
+- `vue/src/components/PropsPanel.vue`：隐藏“按角度刷新”按钮，改法为 `v-if="false"`，保留角度输入框与 `applyAngleLayout()` 逻辑，尚未提交。
+- `temp/` 为未跟踪目录，不提交。`standalone_dist/`、`dist/`、`.rollback/` 均被忽略。
+
+### 构建与运行
+
+- `npm run build` 通过，当前产物 `vue/dist/assets/index-03f2c789.js`。
+- 服务运行于 `127.0.0.1:8766`，静态文件改动直接生效，浏览器需 `Ctrl+F5` 强制刷新。
+- 沙箱 helper 故障，所有命令需提权执行（`sandbox_permissions=require_escalated`）；文件编辑必须用 Python UTF-8 或 `apply_patch`。
+
+### 待办 / 待决策
+
+- 是否提交本次挂点回退与“按角度刷新”隐藏按钮，提交粒度待定。
+- 挂点方案需要重新决策：是保留 `clearLegacyLinesForSubtree`（回去普通边），还是重新设计距离传播（需修掉上述 4 个 bug）。
+- 已知测试问题：`vue-rebuild-layout.js` 的 `presetOk` 因用例先 Undo 再断言而失败，属测试写法问题，不影响布局。
+- 新会话启动建议：先读本节，再读 `docs/ygt-version-history.md` 的 V4.0 节与 `docs/HANDOFF.md` 第 24 至 27 节。
+

@@ -22,7 +22,8 @@
         <div style="display:flex; gap:6px; align-items:center;">
           <input id="global-angle" type="number" min="0" max="360" step="1"
                  :value="globalAngle" @change="globalAngle = Number($event.target.value)">
-          <button id="global-angle-apply" type="button" class="ghost" @click="applyAngleLayout">按角度刷新</button>
+          <!-- 按角度刷新按钮暂时隐藏，恢复时删除 v-if="false" 即可 -->
+          <button v-if="false" id="global-angle-apply" type="button" class="ghost" @click="applyAngleLayout">按角度刷新</button>
         </div>
       </div>
       <div class="prop-divider"></div>
