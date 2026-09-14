@@ -13,6 +13,7 @@ router = APIRouter(prefix="/ygt/docs", tags=["ygt"])
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_BODY_BYTES = 20 * 1024 * 1024  # 20MB
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8MB
 
 
 class DocMeta(BaseModel):
@@ -24,6 +25,7 @@ class DocMeta(BaseModel):
     lyid: Optional[str] = None
     bzxx: Optional[str] = None
     ygtstyle: Optional[str] = None
+    ygtimg: Optional[str] = None
 
 
 class DocCreate(DocMeta):
@@ -44,13 +46,15 @@ class RenameRequest(BaseModel):
     title: str = Field(..., max_length=200)
 
 
-def _validate_payload(cells: List[Any]) -> None:
+def _validate_payload(cells: List[Any], ygtimg: Optional[str] = None) -> None:
     try:
-        size = len(json.dumps({"cells": cells}, ensure_ascii=False).encode("utf-8"))
+        size = len(json.dumps({"cells": cells, "ygtimg": ygtimg}, ensure_ascii=False).encode("utf-8"))
     except (TypeError, ValueError):
         raise HTTPException(status_code=422, detail="cells 必须是合法 JSON 数据")
     if size > MAX_BODY_BYTES:
         raise HTTPException(status_code=413, detail="文档过大，最大 20MB")
+    if ygtimg and len(ygtimg.encode("utf-8")) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="鱼骨图图片过大，最大 8MB")
 
 
 def _ensure_id(doc_id: str) -> str:
@@ -78,7 +82,7 @@ async def create_doc(
     payload: DocCreate,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _validate_payload(payload.cells)
+    _validate_payload(payload.cells, payload.ygtimg)
     title = (payload.title or "未命名鱼骨图").strip()[:200] or "未命名鱼骨图"
     meta = payload.model_dump(exclude={"title", "version", "canvas", "cells"})
     return ygt_store.create_doc(title, payload.cells, payload.canvas, payload.version, meta)
@@ -96,6 +100,18 @@ async def get_doc(
     return doc
 
 
+@router.get("/{doc_id}/image", response_model=dict)
+async def get_doc_image(
+    doc_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    doc_id = _ensure_id(doc_id)
+    ygtimg = ygt_store.get_ygtimg(doc_id)
+    if not ygtimg:
+        raise HTTPException(status_code=404, detail="文档图片不存在")
+    return {"id": doc_id, "ygtimg": ygtimg}
+
+
 @router.put("/{doc_id}", response_model=dict)
 async def save_doc(
     doc_id: str,
@@ -103,7 +119,7 @@ async def save_doc(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     doc_id = _ensure_id(doc_id)
-    _validate_payload(payload.cells)
+    _validate_payload(payload.cells, payload.ygtimg)
     title = (payload.title or "未命名鱼骨图").strip()[:200] or "未命名鱼骨图"
     meta = payload.model_dump(exclude={"title", "version", "canvas", "cells"})
     doc = ygt_store.save_doc(doc_id, title, payload.cells, payload.canvas, payload.version, meta)

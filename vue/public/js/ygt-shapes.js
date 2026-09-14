@@ -462,7 +462,7 @@ window.YGT = window.YGT || {};
       document.body.appendChild(svg);
       var b = p.getBBox();
       document.body.removeChild(svg);
-      var out = { x: b.x, width: b.width };
+      var out = { x: b.x, y: b.y, width: b.width, height: b.height };
       fishPathBBoxCache[pathData] = out;
       return out;
     } catch (e) {
@@ -572,10 +572,19 @@ window.YGT = window.YGT || {};
     var title = o.title || '问题描述';
     var cells = [];
 
+    var join = Math.max(2, Math.round((st.spineWidth || 8) / 2));
     var hs = headSpec(preset, dir, title);
     var ts = tailSpec(preset, dir, spineX0, spineY);
-    var headX = (dir === 'toleft') ? spineX0 - 80 - hs.width : spineX1 + 60;
-    var headY = spineY - hs.height / 2;
+    var headBox = fishPathBBox(hs.path) || { x: 0, y: 0, width: hs.width, height: hs.height };
+    var tailBox = fishPathBBox(ts.path) || { x: 0, y: 0, width: ts.width, height: ts.height };
+    var headX = dir === 'toleft'
+      ? spineX0 + join - headBox.x - headBox.width
+      : spineX1 - join - headBox.x;
+    var headY = spineY - headBox.y - headBox.height / 2;
+    ts.x = dir === 'toleft'
+      ? spineX1 - join - tailBox.x
+      : spineX0 + join - tailBox.x - tailBox.width;
+    ts.y = spineY - tailBox.y - tailBox.height / 2;
 
     cells.push({
       id: 'tpl_head', shape: 'fish-head', x: headX, y: headY,
@@ -607,9 +616,6 @@ window.YGT = window.YGT || {};
       attrs: { body: { fill: st.spineColor, stroke: 'none' } },
       ports: portsOf('left|right|top|bottom')
     });
-    cells.push({ id: 'tpl_e1', shape: 'bone-edge', attrs: edgeLineAttrs(st), source: { cell: 'tpl_tail', port: 'port-right' }, target: { cell: 'tpl_spine', port: 'port-left' } });
-    cells.push({ id: 'tpl_e2', shape: 'bone-edge', attrs: edgeLineAttrs(st), source: { cell: 'tpl_spine', port: 'port-right' }, target: { cell: 'tpl_head', port: 'port-left' } });
-
     if (TEMPLATE_PRESETS[kind]) {
       var groups = o.groups || TEMPLATE_PRESETS[kind] || TEMPLATE_PRESETS.classic;
       var ls1 = levelStyle(preset, 1);
@@ -835,6 +841,7 @@ window.YGT = window.YGT || {};
     dir = dir === 'toleft' ? 'toleft' : 'toright';
     title = title || '鱼骨图';
     var preset = 'ygt1';
+    var st = styleOf(preset);
     var spineY = 420;
     var spineX0 = 120;
     var nodes = mx || [];
@@ -850,10 +857,19 @@ window.YGT = window.YGT || {};
     });
     var spineX1 = spineX0 + Math.max(roots.length, 1) * 150 + 60;
     var cells = [];
+    var join = Math.max(2, Math.round((st.spineWidth || 8) / 2));
     var hs = headSpec(preset, dir, title);
     var ts = tailSpec(preset, dir, spineX0, spineY);
-    var headX = dir === 'toleft' ? spineX0 - 80 - hs.width : spineX1 + 60;
-    var headY = spineY - hs.height / 2;
+    var headBox = fishPathBBox(hs.path) || { x: 0, y: 0, width: hs.width, height: hs.height };
+    var tailBox = fishPathBBox(ts.path) || { x: 0, y: 0, width: ts.width, height: ts.height };
+    var headX = dir === 'toleft'
+      ? spineX0 + join - headBox.x - headBox.width
+      : spineX1 - join - headBox.x;
+    var headY = spineY - headBox.y - headBox.height / 2;
+    ts.x = dir === 'toleft'
+      ? spineX1 - join - tailBox.x
+      : spineX0 + join - tailBox.x - tailBox.width;
+    ts.y = spineY - tailBox.y - tailBox.height / 2;
     cells.push({
       id: 'ygt_head', shape: 'fish-head', x: headX, y: headY,
       width: hs.width, height: hs.height, zIndex: 1,
@@ -882,9 +898,6 @@ window.YGT = window.YGT || {};
       x: spineX0, y: spineY - 4, width: spineX1 - spineX0, height: 8, zIndex: 0,
       ports: portsOf('left|right|top|bottom')
     });
-    cells.push({ id: 'ygt_e_tail', shape: 'bone-edge', source: { cell: 'ygt_tail', port: 'port-right' }, target: { cell: 'ygt_spine', port: 'port-left' } });
-    cells.push({ id: 'ygt_e_head', shape: 'bone-edge', source: { cell: 'ygt_spine', port: 'port-right' }, target: { cell: 'ygt_head', port: 'port-left' } });
-
     var edgeSeq = 0;
     function layoutNode(node, level, parent, parentEdgeId, index) {
       var id = node.id || ('mx_node_' + (edgeSeq++));

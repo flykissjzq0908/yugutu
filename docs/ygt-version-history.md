@@ -1,5 +1,30 @@
 # 鱼骨图版本记录
 
+## V4.1（2026-09-14）定稿版本
+
+- 当前版本：鱼骨图 V4.1（定稿），V4.0 及之前历史节不回改
+- 定稿范围：新建模板与无位置重建去除主轴连接线并按实际路径对齐鱼头鱼尾；文本框入边实时重锚；新增 `hl_ygt.ygtimg` 图片持久化与读取接口
+- Git 标签：`v4.1`
+
+### V4.1 新增/收口
+
+- 新建模板与无 `positions` 重建不再生成鱼尾到鱼干、鱼干到鱼头的连接线；已有 `positions` 文档不回改
+- `ygt1` 到 `ygt7` 按实际路径边界对齐鱼头、鱼尾和鱼干中心，按鱼干宽度保留约 4px 或 5px 视觉重叠
+- 文本框拖动过程中实时重算入边端口，优先使用模型源端坐标，避免旧连接器与旧端口位置干扰
+- `text-node` 拖动时释放直接关联的 `legacyLine`
+- `hl_ygt` 新增 `ygtimg` 字段，PostgreSQL/SQLite 使用 `TEXT`，Oracle 使用 `CLOB`
+- 点击保存时同步导出当前画布 PNG，以 `data:image/png;base64,...` 写入 `ygtimg`
+- 新增 `GET /api/v1/ygt/docs/{doc_id}/image`，返回 `{ id, ygtimg }`
+- 图片单字段限制 `8MB`，文档请求体仍限制 `20MB`
+
+### 回归
+
+- `axis-lines-check.js`：7 套预设、左右方向、主轴线和鱼头鱼尾路径对齐通过
+- `vue-text-port-direction-drag.js`：文本框实时上下、左右端口切换通过
+- `vue-text-port-parent-edge.js`：父线段作为入边源端通过
+- `vue-save-ygtimg.js`：真实保存后 `ygtimg` 写入 PostgreSQL，PNG Data URL 校验通过
+- `vue-smoke.js`、`vue-preview-readonly.js`、`vue-fish-preset.js` 通过，均为 `errors: []`
+
 ## V4.0（2026-09-11）定稿版本
 
 - 当前版本：鱼骨图 V4.0（定稿），V3.1 及之前历史节不回改

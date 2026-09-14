@@ -37,6 +37,7 @@ def ensure_tables() -> None:
                 bzxx VARCHAR(500),
                 ygtstyle TEXT,
                 positions TEXT,
+                ygtimg TEXT,
                 leaftype VARCHAR(20) DEFAULT 'toright',
                 version INTEGER DEFAULT 1
             )
@@ -56,6 +57,32 @@ def ensure_tables() -> None:
                 opentype VARCHAR(20)
             )
         """))
+
+
+def ensure_ygtimg_column() -> None:
+    """为已有 hl_ygt 表补齐 ygtimg 字段。"""
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        if dialect == "postgresql":
+            conn.execute(text("ALTER TABLE hl_ygt ADD COLUMN IF NOT EXISTS ygtimg TEXT"))
+            return
+        if dialect == "sqlite":
+            rows = conn.execute(text("PRAGMA table_info(hl_ygt)")).fetchall()
+            if "ygtimg" not in {str(row[1]) for row in rows}:
+                conn.execute(text("ALTER TABLE hl_ygt ADD COLUMN ygtimg TEXT"))
+            return
+        if dialect == "oracle":
+            exists = conn.execute(
+                text("""
+                    SELECT COUNT(*)
+                    FROM user_tab_columns
+                    WHERE table_name = 'HL_YGT' AND column_name = 'YGTIMG'
+                """)
+            ).scalar()
+            if not exists:
+                conn.execute(text("ALTER TABLE hl_ygt ADD ygtimg CLOB"))
+            return
+        raise RuntimeError(f"不支持的数据库类型: {dialect}")
 
 
 def _is_red(color: Any) -> bool:
@@ -252,10 +279,10 @@ def create_doc(
             text("""
                 INSERT INTO hl_ygt
                     (xh, ygmc, hldw, lrr, zfpb, cjrq, hosid, txlb, lylx, lyid,
-                     flashpb, bzxx, ygtstyle, positions, leaftype, version)
+                     flashpb, bzxx, ygtstyle, positions, ygtimg, leaftype, version)
                 VALUES
                     (:xh, :ygmc, :hldw, :lrr, 0, :cjrq, :hosid, :txlb, :lylx, :lyid,
-                     0, :bzxx, :ygtstyle, :positions, :leaftype, 1)
+                     0, :bzxx, :ygtstyle, :positions, :ygtimg, :leaftype, 1)
             """),
             {
                 "xh": doc_id,
@@ -270,6 +297,7 @@ def create_doc(
                 "bzxx": meta.get("bzxx"),
                 "ygtstyle": meta.get("ygtstyle"),
                 "positions": positions,
+                "ygtimg": meta.get("ygtimg"),
                 "leaftype": _leaftype(cells),
             },
         )
@@ -341,6 +369,16 @@ def get_doc(doc_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def get_ygtimg(doc_id: str) -> Optional[str]:
+    """读取 hl_ygt.ygtimg，不随文档详情接口返回。"""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT ygtimg FROM hl_ygt WHERE xh = :xh"),
+            {"xh": doc_id},
+        ).fetchone()
+    return row.ygtimg if row else None
+
+
 def save_doc(
     doc_id: str,
     title: str,
@@ -363,6 +401,7 @@ def save_doc(
             text("""
                 UPDATE hl_ygt
                 SET ygmc = :ygmc, cjrq = :cjrq, positions = :positions,
+                    ygtimg = COALESCE(:ygtimg, ygtimg),
                     leaftype = :leaftype, version = COALESCE(version, 0) + 1,
                     hldw = COALESCE(:hldw, hldw), lrr = COALESCE(:lrr, lrr),
                     hosid = COALESCE(:hosid, hosid), txlb = COALESCE(:txlb, txlb),
@@ -375,6 +414,7 @@ def save_doc(
                 "ygmc": title,
                 "cjrq": now,
                 "positions": positions,
+                "ygtimg": meta.get("ygtimg"),
                 "leaftype": _leaftype(cells),
                 "hldw": meta.get("hldw"),
                 "lrr": meta.get("lrr"),

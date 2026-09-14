@@ -90,9 +90,14 @@ async def lifespan(app: FastAPI):
     logger.info("服务启动中...")
     if settings.database.type == "oracle":
         logger.info("Oracle 模式跳过自动建表，使用现有 hl_ygt / hl_ygtmx 表")
+        try:
+            ygt_store.ensure_ygtimg_column()
+        except Exception as exc:  # pragma: no cover - startup only
+            logger.warning("ygtimg 字段迁移失败: %s", exc)
     else:
         try:
             ygt_store.ensure_tables()
+            ygt_store.ensure_ygtimg_column()
         except Exception as exc:  # pragma: no cover - startup only
             logger.warning("建表失败: %s", exc)
     logger.info("服务启动成功")

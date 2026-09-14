@@ -391,3 +391,85 @@ setPreview(on)  withHiddenPorts(fn)  batch(fn)  historyPush(label)
 - 已知测试问题：`vue-rebuild-layout.js` 的 `presetOk` 因用例先 Undo 再断言而失败，属测试写法问题，不影响布局。
 - 新会话启动建议：先读本节，再读 `docs/ygt-version-history.md` 的 V4.0 节与 `docs/HANDOFF.md` 第 24 至 27 节。
 
+## 28. 文本框入边端口实时重算（2026-09-11）
+
+### Git 状态
+
+- 最新提交：`5b2159f fix(canvas): 按拖动方向自动重算文本框连接点`。
+- 已推送 `main` 到 GitHub `origin`：`45e7236..5b2159f main -> main`。
+- 本次提交仅包含：`js/ygt-canvas.js`、`vue/public/js/ygt-canvas.js`。
+- `temp/` 仍为未跟踪目录，未提交。
+
+### 本次修复
+
+- 文本框拖动时，其直接入边会在 `cell:change:position` 阶段实时重算连接端口，不再只等到鼠标松开后的 `node:moved`。
+- `text-node` 拖动时会释放直接关联的 `legacyLine` 并恢复普通连线，避免旧连接器继续使用保存路径绘制。
+- 文本框自动选边改为优先使用 `terminalModelPoint(edge.getSource(), 0)` 获取模型源端坐标，失败时回退到 `parentAnchorPoint(edge)`。
+- 自动方向规则：
+  - 源端在左、箭头向右：`port-left`。
+  - 源端在右、箭头向左：`port-right`。
+  - 源端在上、箭头向下：`port-top`。
+  - 源端在下、箭头向上：`port-bottom`。
+  - 横向、纵向谁占主导就按对应轴判断，不要求严格 0/90/180/270 度。
+- 其他节点仍使用原 `parentAnchorPoint()` 和原端口轴逻辑。
+- 手工设置 `portDir` 仍优先，不会被自动判断覆盖。
+
+### 根因记录
+
+- 旧实现优先读取 `edge.getSourcePoint()`；该方法对不同来源类型可能返回旧坐标、视图更新前的坐标或非模型锚点，导致部分入边正确、部分入边错误。
+- 仅使用 `node:moved` 触发重算，拖动过程中不会实时切换端口。
+- 文本框不在 `clearLegacyLinesForSubtree` 的释放范围内，带 `legacyLine` 的入边会保持旧路径。
+
+### 回归
+
+- `p28-text-port-fourway.js`：四端口、旧端口偏置、模型源端与视图源端不一致、手工吸附通过。
+- `vue-text-port-direction-drag.js`：真实 Vue 页面实时上下、左右拖动与 `legacyLine` 释放通过。
+- `vue-text-port-parent-edge.js`：父线段作为源端的上下方向切换通过。
+- `p24-portdir.js`、`p25-vertical.js`、`vue-smoke.js` 通过，均为 `errors: []`。
+- `vue/dist` 已通过 `npm run build` 重建；根目录、`vue/public/js`、`vue/dist/js` 三个 `ygt-canvas.js` 哈希一致。
+
+### 测试与运行约束
+
+- `tests/` 目录按 `.gitignore` 忽略，回归脚本保留在本地，不进入 Git。
+- 浏览器验证需访问 `http://127.0.0.1:8766`，静态文件改动后执行 `Ctrl+F5`。
+- 本轮未修改后端、保存结构、导出逻辑、布局算法或其他节点端口行为。
+
+## 29. 鱼骨图 V4.1 定稿（2026-09-14）
+
+### 版本与 Git
+
+- 当前定稿：鱼骨图 V4.1，Git 标签 `v4.1`，分支 `main`。
+- `vue/package.json` 版本同步为 `4.1.0`。
+- 版本记录：`README.md`、`docs/ygt-version-history.md` 顶部新增 V4.1 定稿节。
+
+### V4.1 已实现
+
+- 新建模板与无 `positions` 重建不再生成鱼尾到鱼干、鱼干到鱼头的连接线。
+- `buildTemplate()` 与 `buildFromLegacyMx()` 改为按实际路径边界对齐鱼头、鱼尾和鱼干中心。
+- `ygt1` 到 `ygt7` 在 `toright`、`toleft` 下均校验通过，保留约 4px 或 5px 视觉重叠。
+- 文本框拖动时在 `cell:change:position` 实时重算入边端口，优先用模型源端坐标。
+- `text-node` 拖动时释放直接关联的 `legacyLine`，避免旧路径不跟随。
+- `hl_ygt` 新增 `ygtimg` 字段：PostgreSQL/SQLite `TEXT`，Oracle `CLOB`；已有表执行幂等补列。
+- 点击保存时自动导出 PNG Data URL 并写入 `ygtimg`。
+- 新增 `GET /api/v1/ygt/docs/{doc_id}/image`，返回 `{ id, ygtimg }`。
+
+### 数据与运行
+
+- `ygtimg` 保存完整 `data:image/png;base64,...`，单字段最大 `8MB`。
+- 文档详情接口默认不返回图片；图片通过独立接口读取。
+- 当前 PostgreSQL 已补齐 `hl_ygt.ygtimg` 字段，8766 后端已加载新接口。
+- 已实测保存图片长度约 `106110`，保存路径和读取接口均正常。
+
+### 验证
+
+- `axis-lines-check.js`：7 套预设、左右方向、主轴线和路径对齐通过。
+- `vue-text-port-direction-drag.js`、`vue-text-port-parent-edge.js` 通过。
+- `vue-save-ygtimg.js`：真实保存后 PostgreSQL 中 `ygtimg` 写入成功。
+- `vue-smoke.js`、`vue-preview-readonly.js`、`vue-fish-preset.js` 通过。
+- `npm run build` 通过，Vue 构建产物已更新。
+
+### 边界说明
+
+- 已有 `positions` 文档不回改，旧文档中原有主轴连接线仍会保留。
+- `applyPresetStyle()` 仍沿用原逻辑；本次只保证新建模板和无 `positions` 重建的鱼头鱼尾对齐。
+

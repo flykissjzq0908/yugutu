@@ -253,13 +253,21 @@ async function saveDoc() {
     toast('保存失败：' + v.errors[0] + (v.errors.length > 1 ? ' 等 ' + v.errors.length + ' 个问题' : ''), true);
     return;
   }
+  let ygtimg = null;
+  try {
+    ygtimg = await exportPngDataUrl();
+  } catch (e) {
+    toast('图片生成失败：' + errorMessage(e), true);
+    return;
+  }
   try {
     const saved = await ygtApi.save(doc.id, {
       title: doc.title,
       version: doc.version || '1.0',
       canvas: doc.canvas || { background: '#ffffff' },
       cells: doc.cells,
-      ygtstyle: doc.ygtstyle || null
+      ygtstyle: doc.ygtstyle || null,
+      ygtimg
     });
     currentDoc.value = saved;
     dirty.value = false;
@@ -390,6 +398,26 @@ function exportPNG() {
     canvas.value.exportPlugin.exportPNG(title, { padding: 60, backgroundColor: '#ffffff' });
   });
   toast('已导出 PNG');
+}
+
+function exportPngDataUrl() {
+  return new Promise((resolve, reject) => {
+    if (!canvas.value || !canvas.value.exportPlugin || typeof canvas.value.exportPlugin.toPNG !== 'function') {
+      reject(new Error('导出组件未加载'));
+      return;
+    }
+    let settled = false;
+    canvas.value.withHiddenPorts(() => {
+      canvas.value.exportPlugin.toPNG((dataUrl) => {
+        settled = true;
+        if (dataUrl) resolve(dataUrl);
+        else reject(new Error('未生成图片数据'));
+      }, { padding: 60, backgroundColor: '#ffffff' });
+    });
+    setTimeout(() => {
+      if (!settled) reject(new Error('图片生成超时'));
+    }, 15000);
+  });
 }
 
 function svgContentBox() {
