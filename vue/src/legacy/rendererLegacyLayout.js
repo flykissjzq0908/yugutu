@@ -189,6 +189,26 @@ function applyGeometry(canvas, geometry) {
         window.YGT.shapes.applyPresetStyle(graph, preset, hd.ygtDir);
       }
     }
+    const finalHead = graph.getNodes().find((node) => node.shape === 'fish-head');
+    const finalTail = graph.getNodes().find((node) => node.shape === 'fish-tail');
+    const finalSpine = graph.getNodes().find((node) => node.shape === 'fish-spine');
+    if (finalHead && finalTail && finalSpine) {
+      const spinePos = finalSpine.position();
+      const spineSize = finalSpine.getSize();
+      const headSize = finalHead.getSize();
+      const tailSize = finalTail.getSize();
+      const dir = ((finalHead.getData() || {}).ygtDir) === 'toleft' ? 'toleft' : 'toright';
+      const join = Math.max(2, Math.round(spineSize.height / 2));
+      const centerY = spinePos.y + spineSize.height / 2;
+      const headX = dir === 'toleft'
+        ? spinePos.x - headSize.width + join
+        : spinePos.x + spineSize.width - join;
+      const tailX = dir === 'toleft'
+        ? spinePos.x + spineSize.width - join
+        : spinePos.x - tailSize.width + join;
+      finalHead.position(headX, centerY - headSize.height / 2);
+      finalTail.position(tailX, centerY - tailSize.height / 2);
+    }
     });
   } finally {
     if (canvas.setLegacySyncSuppressed) canvas.setLegacySyncSuppressed(false);

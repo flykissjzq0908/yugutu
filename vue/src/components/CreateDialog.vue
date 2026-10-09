@@ -98,6 +98,7 @@ async function submit() {
       cells,
       canvas: { background: '#ffffff' }
     });
+    sessionStorage.setItem('ygt:auto-rebuild-layout', doc.id);
     window.location.href = window.location.pathname + '?docId=' + encodeURIComponent(doc.id);
   } catch (e) {
     error.value = '创建失败：' + errorMessage(e);

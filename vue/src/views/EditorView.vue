@@ -85,6 +85,7 @@ import LegacyHierarchyRebuildButton from '../components/LegacyHierarchyRebuildBu
 import { icons } from '../components/icons';
 import { ygtApi } from '../api/ygt';
 import { errorMessage } from '../api/client';
+import { rebuildLegacyLayout } from '../legacy/legacyLayoutAdapter.js';
 
 const TEMPLATE_NAMES = {
   empty: '空骨架', classic: '经典六原因', qc: '医疗质控',
@@ -179,9 +180,29 @@ async function init() {
     titleText.value = doc.title || '未命名鱼骨图';
     document.title = titleText.value + ' - 鱼骨图编辑器';
     mountEditor(doc);
+    await autoRebuildNewDocument(doc);
   } catch (e) {
     loadingError.value = '加载失败：' + errorMessage(e);
   }
+}
+
+async function autoRebuildNewDocument(doc) {
+  if (!doc || sessionStorage.getItem('ygt:auto-rebuild-layout') !== doc.id) return;
+  sessionStorage.removeItem('ygt:auto-rebuild-layout');
+  const hasBusinessNode = (doc.cells || []).some((cell) =>
+    cell && (cell.shape === 'bone-node' || cell.shape === 'group-node')
+  );
+  if (!hasBusinessNode) return;
+  await nextTick();
+  const head = (doc.cells || []).find((cell) => cell && cell.shape === 'fish-head');
+  const preset = (head && head.data && head.data.ygtPreset) || doc.ygtstyle || '';
+  if (preset) doc.ygtstyle = preset;
+  const result = await rebuildLegacyLayout(canvas.value, preset);
+  if (!result || !result.ok) {
+    toast((result && result.message) || '新建文档自动布局失败', true);
+    return;
+  }
+  await saveDoc();
 }
 
 function mountEditor(doc) {
