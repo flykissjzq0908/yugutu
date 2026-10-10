@@ -510,6 +510,79 @@ window.YGT = window.YGT || {};
 
     var draggingDot = null;
     var nodeBodyDrag = null;
+
+    function isBusinessNode(node) {
+      return !!node && (node.shape === 'bone-node' || node.shape === 'group-node');
+    }
+
+    function syncChildLineAnchors(parentEdge, seen) {
+      if (!parentEdge || !parentEdge.getData) return;
+      seen = seen || {};
+      if (seen[parentEdge.id]) return;
+      seen[parentEdge.id] = true;
+      var parentLine = (parentEdge.getData() || {}).legacyLine;
+      if (!parentLine) return;
+      graph.getEdges().forEach(function (childEdge) {
+        if (childEdge.shape !== 'bone-edge' || childEdge === parentEdge) return;
+        var source = childEdge.getSource && childEdge.getSource();
+        if (!source || source.cell !== parentEdge.id) return;
+        var data = childEdge.getData ? (childEdge.getData() || {}) : {};
+        if (!data.legacyLine) return;
+        var ratio = source.anchor && source.anchor.args && typeof source.anchor.args.ratio === 'number'
+          ? source.anchor.args.ratio
+          : 0.5;
+        data.legacyLine = Object.assign({}, data.legacyLine, {
+          x1: parentLine.x1 + (parentLine.x2 - parentLine.x1) * ratio,
+          y1: parentLine.y1 + (parentLine.y2 - parentLine.y1) * ratio
+        });
+        childEdge.setData(data, { silent: true });
+        var view = childEdge.findView && childEdge.findView(graph);
+        if (view && typeof view.update === 'function') view.update();
+        syncChildLineAnchors(childEdge, seen);
+      });
+    }
+
+    function updateFixedStartEdge(node) {
+      if (!isBusinessNode(node)) return false;
+      var incoming = (graph.getIncomingEdges(node) || []).find(function (edge) {
+        return edge.shape === 'bone-edge';
+      });
+      var edgeData = incoming && incoming.getData ? (incoming.getData() || {}) : {};
+      var line = edgeData.legacyLine;
+      if (!line) return false;
+      var box = node.getBBox();
+      var center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      var dx = line.x1 - center.x;
+      var dy = line.y1 - center.y;
+      var port = Math.abs(dx) >= Math.abs(dy)
+        ? (dx <= 0 ? 'port-left' : 'port-right')
+        : (dy <= 0 ? 'port-top' : 'port-bottom');
+      var target = nodeTerminalPoint(node, port);
+      var marker = incoming.attr('line/targetMarker') || {};
+      var markerWidth = Math.max(4, Number(marker.width) || 10);
+      var markerRefX = Number(marker.refX);
+      if (!isFinite(markerRefX)) markerRefX = 0;
+      var arrowExtent = markerWidth / 2 - markerRefX + 2;
+      var towardTargetX = target.x - line.x1;
+      var towardTargetY = target.y - line.y1;
+      var towardTargetLength = Math.hypot(towardTargetX, towardTargetY);
+      if (towardTargetLength > 0) {
+        target.x -= towardTargetX / towardTargetLength * arrowExtent;
+        target.y -= towardTargetY / towardTargetLength * arrowExtent;
+      }
+      edgeData.legacyLine = {
+        x1: line.x1,
+        y1: line.y1,
+        x2: target.x,
+        y2: target.y
+      };
+      incoming.setData(edgeData, { silent: true });
+      incoming.setTarget({ cell: node.id, port: port });
+      var view = incoming.findView && incoming.findView(graph);
+      if (view && typeof view.update === 'function') view.update();
+      syncChildLineAnchors(incoming);
+      return true;
+    }
     function ensureDotBridges() {
       graph.getNodes().forEach(function (n) {
         if (n.shape !== 'dot-node') return;
@@ -932,7 +1005,8 @@ window.YGT = window.YGT || {};
     graph.on('cell:removed', notifyChanged);
     graph.on('edge:connected', notifyChanged);
     graph.on('cell:change:position', function (args) {
-      if (!suppressLegacySync && args && args.cell && args.cell.isNode && args.cell.isNode()) {
+      var fixedStart = args && args.cell && updateFixedStartEdge(args.cell);
+      if (!fixedStart && !suppressLegacySync && args && args.cell && args.cell.isNode && args.cell.isNode()) {
         clearLegacyLinesForSubtree(args.cell);
       }
       if (!suppressLegacySync && args && args.cell && args.cell.shape === 'text-node') {
@@ -943,7 +1017,8 @@ window.YGT = window.YGT || {};
     graph.on('cell:change:attrs', notifyChanged);
     graph.on('node:moved', function (args) {
       var node = args && args.node;
-      if (!suppressLegacySync && node) clearLegacyLinesForSubtree(node);
+      var fixedStart = updateFixedStartEdge(node);
+      if (!fixedStart && !suppressLegacySync && node) clearLegacyLinesForSubtree(node);
       historyPush('移动节点');
     });
     graph.on('node:click', function (args) {
