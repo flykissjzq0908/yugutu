@@ -2,6 +2,10 @@ import { getFixedNodeSize } from './rebuildLegacyLayout.js';
 
 const MAX_LAYOUT_LEVEL = 4;
 const PADDING = 40;
+const MIN_GROUP_GAP = 36;
+const HEAD_OVERLAP = 20;
+const HEAD_VISUAL_GAP = 12;
+const HEAD_GROUP_GAP = HEAD_VISUAL_GAP + HEAD_OVERLAP;
 
 function levelOf(node) {
   const d = node && node.getData ? (node.getData() || {}) : {};
@@ -123,9 +127,88 @@ function collectBounds(items, skeleton) {
   return { minX, minY, maxX, maxY };
 }
 
+function compactGroupSpacing(items) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const roots = items
+    .filter((item) => Number(item.level) === 1)
+    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  if (roots.length < 4) return [];
+
+  const groups = [];
+  for (let i = 0; i < roots.length; i += 2) {
+    const rootIds = new Set(roots.slice(i, i + 2).map((item) => item.id));
+    const members = items.filter((item) => {
+      if (rootIds.has(item.id)) return true;
+      let parentId = item.parentId;
+      for (let depth = 0; parentId && depth < 16; depth += 1) {
+        if (rootIds.has(parentId)) return true;
+        const parent = byId.get(parentId);
+        parentId = parent && parent.parentId;
+      }
+      return false;
+    });
+    const bounds = { minX: Infinity, maxX: -Infinity };
+    members.forEach((item) => {
+      if (item.line) {
+        bounds.minX = Math.min(bounds.minX, Number(item.line.x1), Number(item.line.x2));
+        bounds.maxX = Math.max(bounds.maxX, Number(item.line.x1), Number(item.line.x2));
+      }
+      if (item.text) {
+        const width = Number(item.text.width) || 0;
+        bounds.minX = Math.min(bounds.minX, Number(item.text.x) - width / 2);
+        bounds.maxX = Math.max(bounds.maxX, Number(item.text.x) + width / 2);
+      }
+    });
+    if (Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxX)) {
+      groups.push({ members, bounds });
+    }
+  }
+
+  groups.sort((a, b) => a.bounds.minX - b.bounds.minX);
+  const originalCenter = (groups[0].bounds.minX + groups[groups.length - 1].bounds.maxX) / 2;
+  function translateGroup(group, dx) {
+    group.members.forEach((item) => {
+      if (item.line) {
+        item.line.x1 = Number(item.line.x1) + dx;
+        item.line.x2 = Number(item.line.x2) + dx;
+      }
+      if (item.text) item.text.x = Number(item.text.x) + dx;
+    });
+    group.bounds.minX += dx;
+    group.bounds.maxX += dx;
+  }
+  for (let i = 1; i < groups.length; i += 1) {
+    const previous = groups[i - 1];
+    const current = groups[i];
+    const targetMinX = previous.bounds.maxX + MIN_GROUP_GAP;
+    if (targetMinX >= current.bounds.minX) continue;
+    const dx = targetMinX - current.bounds.minX;
+    translateGroup(current, dx);
+  }
+  const compactedCenter = (groups[0].bounds.minX + groups[groups.length - 1].bounds.maxX) / 2;
+  const centerDx = originalCenter - compactedCenter;
+  if (Math.abs(centerDx) > 0.001) {
+    groups.forEach((group) => translateGroup(group, centerDx));
+  }
+  return groups;
+}
+
+function pullSpineToHead(groups, skeleton) {
+  if (!groups.length || !skeleton || !skeleton.spine) return;
+  const dir = skeleton.head && skeleton.head.dir === 'toleft' ? 'toleft' : 'toright';
+  const nearest = dir === 'toleft' ? groups[0] : groups[groups.length - 1];
+  if (dir === 'toleft') {
+    skeleton.spine.x1 = nearest.bounds.minX - HEAD_GROUP_GAP;
+  } else {
+    skeleton.spine.x2 = nearest.bounds.maxX + HEAD_GROUP_GAP;
+  }
+}
+
 function applyGeometry(canvas, geometry) {
   if (!geometry || !geometry.ok || !geometry.items || !geometry.items.length) return { ok: false, message: '旧渲染器没有返回几何数据' };
   const graph = canvas.graph;
+  const groups = compactGroupSpacing(geometry.items);
+  pullSpineToHead(groups, geometry.skeleton);
   const bounds = collectBounds(geometry.items, geometry.skeleton);
   const dx = -bounds.minX + PADDING;
   const dy = -bounds.minY + PADDING;
@@ -214,8 +297,8 @@ function applyGeometry(canvas, geometry) {
       const join = Math.max(2, Math.round(spineSize.height / 2));
       const centerY = spinePos.y + spineSize.height / 2;
       const headX = dir === 'toleft'
-        ? spinePos.x - headSize.width + join
-        : spinePos.x + spineSize.width - join;
+        ? spinePos.x - headSize.width + HEAD_OVERLAP
+        : spinePos.x + spineSize.width - HEAD_OVERLAP;
       const tailX = dir === 'toleft'
         ? spinePos.x + spineSize.width - join
         : spinePos.x - tailSize.width + join;

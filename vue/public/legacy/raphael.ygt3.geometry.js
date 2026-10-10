@@ -3613,6 +3613,14 @@ html += '<div class="ygt-ps"><div class="ygt-pl">预设风格</div><div class="y
         if (width > 0 && height > 0) {
             var dx = Number(line.x2) - Number(line.x1);
             var dy = Number(line.y2) - Number(line.y1);
+            var lineLength = Math.hypot(dx, dy);
+            if (item.jb == 2 && (!item.children || item.children.length === 0) && lineLength > g_height1) {
+                var scale = g_height1 / lineLength;
+                line.x2 = Math.round(Number(line.x1) + dx * scale, 3);
+                line.y2 = Math.round(Number(line.y1) + dy * scale, 3);
+                dx = Number(line.x2) - Number(line.x1);
+                dy = Number(line.y2) - Number(line.y1);
+            }
             var x = Number(line.x2);
             var y = Number(line.y2);
             if (Math.abs(dx) >= Math.abs(dy)) {
