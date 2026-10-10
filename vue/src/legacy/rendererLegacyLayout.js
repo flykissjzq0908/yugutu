@@ -1,3 +1,5 @@
+import { getFixedNodeSize } from './rebuildLegacyLayout.js';
+
 const MAX_LAYOUT_LEVEL = 4;
 const PADDING = 40;
 
@@ -62,6 +64,7 @@ function createPayload(canvas, ygtstyleValue) {
   const head = graph.getNodes().find((node) => node.shape === 'fish-head');
   const headData = head ? (head.getData() || {}) : {};
   const dir = headData.ygtDir === 'toleft' ? 'toleft' : 'toright';
+  const preset = normalizePreset(ygtstyleValue);
   const nodes = graph.getNodes().filter((node) => node.shape === 'bone-node' || node.shape === 'group-node');
   nodes.sort((a, b) => {
     const ad = a.getData() || {};
@@ -70,21 +73,31 @@ function createPayload(canvas, ygtstyleValue) {
   });
   const items = nodes.map((node) => {
     const d = node.getData() || {};
+    const level = levelOf(node) || 1;
+    const size = getFixedNodeSize(level);
+    const levelStyle = window.YGT && window.YGT.shapes && typeof window.YGT.shapes.levelStyle === 'function'
+      ? window.YGT.shapes.levelStyle(preset, level)
+      : {};
+    const strokeWidth = Number(levelStyle.strokeWidth) || 2;
+    const arrowGap = Math.ceil(strokeWidth + 5.5 + 2);
     return {
       ID: node.id,
       PARENT: (!d.parentId || d.parentId === '__ROOT__' || levelOf(node) === 1) ? 'ROOT' : d.parentId,
       NAME: d.label || node.attr('label/text') || '',
       IMPORTANT: d.important ? '1' : '0',
       URL: d.url || '',
-      OPENTYPE: d.openType || ''
+      OPENTYPE: d.openType || '',
+      FIXED_WIDTH: size.width,
+      FIXED_HEIGHT: size.height,
+      FIXED_ARROW_GAP: arrowGap
     };
   });
   return {
     items,
     title: (canvas.graph.getNodes().find((node) => node.shape === 'fish-head') && (canvas.graph.getNodes().find((node) => node.shape === 'fish-head').getData() || {}).title) || '鱼骨图',
-    ygtstyle: normalizePreset(ygtstyleValue),
+    ygtstyle: preset,
     dir,
-    fixedText: false
+    fixedText: true
   };
 }
 

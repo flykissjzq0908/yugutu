@@ -2381,8 +2381,17 @@ html += '<div class="ygt-ps"><div class="ygt-pl">预设风格</div><div class="y
             var isLeaf2 = (item.jb == 2 || item.jb == "2");
             var ratio = isLeaf1 ? g_text_line_spacing_ratio_1 : (isLeaf2 ? g_text_line_spacing_ratio_2 : g_text_line_spacing_ratio_3);
             var textSpacing = Math.round(height * ratio);
-
-            if (angle == 0 || angle == 360) {
+            var fixedArrowGap = Number(item.FIXED_ARROW_GAP);
+            if (window.__YGT_LEGACY_FIXED_TEXT__ && isFinite(fixedArrowGap) && fixedArrowGap > 0) {
+                var line = objs[0] || {};
+                var directionX = Number(line.x2) - Number(line.x1);
+                var directionY = Number(line.y2) - Number(line.y1);
+                if (Math.abs(directionX) >= Math.abs(directionY)) {
+                    x += (directionX >= 0 ? 1 : -1) * (width / 2 + fixedArrowGap);
+                } else {
+                    y += (directionY >= 0 ? 1 : -1) * (height / 2 + fixedArrowGap);
+                }
+            } else if (angle == 0 || angle == 360) {
                 x = x - Math.round(width, 3) / 2 - 2 - textSpacing;
             } else if (angle == 180) {
                 x = x + Math.round(width, 3) / 2 + 2 + textSpacing;
@@ -2908,7 +2917,7 @@ html += '<div class="ygt-ps"><div class="ygt-pl">预设风格</div><div class="y
         obj.objs[1].y1 = cc.end_y;
         // 一级节点：根据在鱼骨上方(pos奇数)还是下方(pos偶数)调整边框位置
         // 使鱼骨线末端对齐边框靠近鱼骨干一侧的边缘中心
-        if (item.jb == 1 || item.jb == "1") {
+        if (!window.__YGT_LEGACY_FIXED_TEXT__ && (item.jb == 1 || item.jb == "1")) {
             var pos = item.pos;
             var tsY = textsize.y;
             var tsH = textsize.height;
@@ -3589,7 +3598,32 @@ html += '<div class="ygt-ps"><div class="ygt-pl">预设风格</div><div class="y
         // ===== 碰撞检测已禁用：原实现在 redraw2direction/set_MaxMin 之后修改坐标会破坏父子节点连线关系 =====
         // 如需重新启用碰撞检测，必须在坐标计算阶段（get_fish_deep/redraw2direction内部）完成，而非后处理修改
 
+        normalizeFixedTextAnchors(obj);
         return obj
+    }
+
+    function normalizeFixedTextAnchors(item) {
+        if (!window.__YGT_LEGACY_FIXED_TEXT__ || !item || !item.objs) return;
+        var line = item.objs[0];
+        var text = item.objs[1];
+        if (!line || !text || !text.textsize) return;
+        var width = Number(text.textsize.width) || 0;
+        var height = Number(text.textsize.height) || 0;
+        var gap = Number(item.FIXED_ARROW_GAP) || 0;
+        if (width > 0 && height > 0) {
+            var dx = Number(line.x2) - Number(line.x1);
+            var dy = Number(line.y2) - Number(line.y1);
+            var x = Number(line.x2);
+            var y = Number(line.y2);
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                x += (dx >= 0 ? 1 : -1) * (width / 2 + gap);
+            } else {
+                y += (dy >= 0 ? 1 : -1) * (height / 2 + gap);
+            }
+            text.x1 = Math.round(x, 3);
+            text.y1 = Math.round(y, 3);
+        }
+        (item.children || []).forEach(normalizeFixedTextAnchors);
     }
 
     function get_leaf_array(a_leaf) {

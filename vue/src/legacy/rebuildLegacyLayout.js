@@ -6,6 +6,11 @@ const FIXED_NODE_SIZES = {
   4: { width: 140, height: 32 }
 };
 
+export function getFixedNodeSize(level) {
+  const safeLevel = Math.max(1, Math.min(MAX_LAYOUT_LEVEL, Number(level) || 1));
+  return FIXED_NODE_SIZES[safeLevel] || FIXED_NODE_SIZES[4];
+}
+
 function isBusiness(node) {
   return !!node && (node.shape === 'bone-node' || node.shape === 'group-node');
 }
@@ -21,8 +26,7 @@ function levelOf(node) {
 }
 
 function fixedSizeFor(node) {
-  const level = Math.max(1, Math.min(MAX_LAYOUT_LEVEL, levelOf(node) || 1));
-  return FIXED_NODE_SIZES[level] || FIXED_NODE_SIZES[4];
+  return getFixedNodeSize(levelOf(node) || 1);
 }
 
 function incomingEdgeOf(graph, node) {
