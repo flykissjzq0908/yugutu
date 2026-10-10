@@ -58,6 +58,20 @@ window.YGT = window.YGT || {};
     graph.use(clipboard);
     graph.use(history);
     graph.use(exportPlugin);
+    var snaplineSuppressedForDrag = false;
+
+    function setNodeDragSnaplineSuppressed(suppress) {
+      if (!snapline) return;
+      if (suppress) {
+        if (snaplineSuppressedForDrag) return;
+        snaplineSuppressedForDrag = true;
+        if (typeof snapline.disable === 'function') snapline.disable();
+      } else {
+        if (!snaplineSuppressedForDrag) return;
+        snaplineSuppressedForDrag = false;
+        if (typeof snapline.enable === 'function') snapline.enable();
+      }
+    }
 
     if (readonly) {
       if (selection && typeof selection.disable === 'function') selection.disable();
@@ -949,6 +963,7 @@ window.YGT = window.YGT || {};
     document.addEventListener('mouseup', function (e) {
       if (!nodeBodyDrag) return;
       endNodeBodyDrag(e);
+      setNodeDragSnaplineSuppressed(false);
       nodeBodyDrag = null;
     }, true);
 
@@ -1035,6 +1050,7 @@ window.YGT = window.YGT || {};
     graph.on('node:mousedown', function (args) {
       if (readonly) return;
       if ((args.node.shape === 'bone-node' || args.node.shape === 'group-node') && args.e) {
+        setNodeDragSnaplineSuppressed(true);
         nodeBodyDrag = {
           node: args.node,
           startClient: { x: args.e.clientX, y: args.e.clientY },
@@ -1063,6 +1079,7 @@ window.YGT = window.YGT || {};
         if (nodeBodyDrag.lastEvent) endNodeBodyDrag(nodeBodyDrag.lastEvent);
         nodeBodyDrag = null;
       }
+      setNodeDragSnaplineSuppressed(false);
     });
     graph.on('edge:change:source', syncAttachedDots);
     graph.on('edge:change:target', syncAttachedDots);
